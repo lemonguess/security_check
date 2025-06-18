@@ -1,0 +1,222 @@
+# AI内容审核系统默认配置
+
+# 应用基础配置
+app:
+  name: "AI Content Moderator"
+  version: "1.0.0"
+  debug: false
+  
+# 日志配置
+logging:
+  level: "INFO"
+  file: "logs/moderator.log"
+  rotation: "10 MB"
+  retention: "7 days"
+
+# 模型配置
+models:
+  # 默认使用的模型
+  default: "ollama_qwen"
+  
+  # 各模型提供商配置
+  providers:
+    # 本地Ollama配置
+    ollama_qwen:
+      config_name: "ollama_qwen_config"
+      type: "ollama_chat"
+      model_name: "qwen2.5:7b"
+      api_base: "http://localhost:11434"
+      max_tokens: 2000
+      temperature: 0.1
+      timeout: 60
+      
+    # 通义千问在线配置（备用）
+    qwen:
+      config_name: "qwen_config"
+      type: "dashscope_chat"
+      model_name: "qwen-max"
+      api_key: "${DASHSCOPE_API_KEY}"
+      max_tokens: 2000
+      temperature: 0.1
+      timeout: 30
+    
+    # OpenAI配置（备用）
+    openai:
+      config_name: "openai_config"
+      type: "openai_chat"
+      model_name: "gpt-4"
+      api_key: "${OPENAI_API_KEY}"
+      max_tokens: 2000
+      temperature: 0.1
+      timeout: 30
+      
+    # Claude配置（备用）
+    claude:
+      config_name: "claude_config"
+      type: "anthropic_chat"
+      model_name: "claude-3-sonnet-20240229"
+      api_key: "${ANTHROPIC_API_KEY}"
+      max_tokens: 2000
+      temperature: 0.1
+      timeout: 30
+
+# 审核引擎配置
+engines:
+  # 启用的引擎
+  enabled:
+    - "ai"
+    - "rule"
+    
+  # AI引擎配置
+  ai:
+    enabled: true
+    timeout: 60
+    retry_count: 2
+    
+  # 规则引擎配置  
+  rule:
+    enabled: true
+    timeout: 5
+    
+  # 融合引擎配置
+  fusion:
+    strategy: "weighted_average"  # 融合策略: weighted_average, max_score, voting
+    ai_weight: 0.7               # AI结果权重
+    rule_weight: 0.3             # 规则结果权重
+
+# 风险阈值配置
+thresholds:
+  blocked: 0.8      # 阻止阈值
+  risky: 0.5        # 高风险阈值
+  suspicious: 0.2   # 可疑阈值
+  
+  # 自动处理策略
+  auto_actions:
+    blocked: "reject"      # 阻止 -> 拒绝
+    risky: "review"        # 高风险 -> 人工审核
+    suspicious: "mask"     # 可疑 -> 内容脱敏
+    safe: "approve"        # 安全 -> 通过
+
+# 内容处理配置
+content:
+  max_length: 10000        # 最大内容长度
+  min_length: 1           # 最小内容长度
+  supported_types:        # 支持的内容类型
+    - "text"
+    - "html"
+  
+  # 脱敏配置
+  masking:
+    enabled: true
+    mask_char: "*"
+    preserve_length: true
+    
+    # 脱敏规则
+    rules:
+      phone: true          # 手机号脱敏
+      id_card: true        # 身份证脱敏
+      email: true          # 邮箱脱敏
+      sensitive_words: true # 敏感词脱敏
+
+# 性能配置
+performance:
+  # 并发配置
+  max_concurrent_requests: 50
+  queue_size: 500
+  
+  # 超时配置
+  default_timeout: 60
+  ai_timeout: 60
+  rule_timeout: 5
+  
+  # 重试配置
+  max_retries: 2
+  retry_delay: 1
+
+# 缓存配置
+cache:
+  enabled: false
+  ttl: 3600              # 缓存过期时间（秒）
+  max_size: 10000        # 最大缓存条目数
+
+# API配置
+api:
+  host: "0.0.0.0"
+  port: 8000
+  prefix: "/api/v1"
+  
+  # 限流配置
+  rate_limiting:
+    enabled: true
+    requests_per_minute: 1000
+    burst: 100
+    
+  # CORS配置
+  cors:
+    enabled: true
+    origins:
+      - "*"
+    methods:
+      - "GET"
+      - "POST"
+      - "OPTIONS"
+
+# 监控配置
+monitoring:
+  metrics:
+    enabled: true
+    endpoint: "/metrics"
+    
+  health_check:
+    enabled: true
+    endpoint: "/health"
+    
+  # Prometheus配置
+  prometheus:
+    enabled: true
+    job_name: "ai_content_moderator"
+
+# 安全配置
+security:
+  # API密钥验证
+  api_key:
+    enabled: false
+    header_name: "X-API-Key"
+    
+  # IP白名单
+  ip_whitelist:
+    enabled: false
+    allowed_ips: []
+
+# 数据库配置（可选）
+database:
+  enabled: false
+  url: "${DATABASE_URL}"
+  
+# 外部服务配置
+external_services:
+  # 敏感词库服务
+  sensitive_words_api:
+    enabled: false
+    url: "${SENSITIVE_WORDS_API_URL}"
+    api_key: "${SENSITIVE_WORDS_API_KEY}"
+    
+# Ollama特定配置
+ollama:
+  # 服务器配置
+  server:
+    host: "localhost"
+    port: 11434
+    timeout: 60
+    
+  # 模型配置
+  models:
+    qwen2_5_7b:
+      name: "qwen2.5:7b"
+      context_length: 4096
+      
+  # 连接配置
+  connection:
+    max_retries: 3
+    retry_delay: 2
+    keep_alive: true 

@@ -14,3 +14,9 @@ logger.add(
     level="INFO"
 )
 logger.add(sys.stderr, level="INFO")
+
+def get_logger(name):
+    global logger
+    if name:
+        logger = logger.bind(name=name)
+    return logger

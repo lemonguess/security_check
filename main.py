@@ -1,65 +1,117 @@
+import os
+from contextlib import asynccontextmanager
+
+
+from services.moderation_service import ModerationService
+from utils.config import load_config
+from utils.logger import logger
 from fastapi import FastAPI, HTTPException
-from models.models import CheckRequest, CheckResponse, TaskStatusResponse, TaskStatusRequest
-from config.logger import logger
-from services.wangyiyunsdk import (
-    check_images_service,
-    check_audios_service,
-    check_videos_service
-)
+from starlette.middleware.cors import CORSMiddleware
+from starlette.responses import HTMLResponse
+from apps.checks import check_router
+from apps.moderation import router as moderation_router
+from apps.scraper import router as scraper_router
 from task import start_task_loop
 import threading
-from models.database import Task  # 新增导入 Task 模型
-from typing import List  # 新增导入 List 类型
 
-app = FastAPI()
+from utils.metrics import get_metrics_collector
 
-# 启动异步任务
-threading.Thread(target=start_task_loop, daemon=True).start()
 
-@app.post("/tasks/status", response_model=List[TaskStatusResponse])
-async def get_task_status(request: TaskStatusRequest):
-    """
-    根据任务 ID 列表查询对应任务的状态
-    """
-    logger.info("Querying task status")
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """应用生命周期管理"""
+    # global config, service, logger
+
+    # 启动时初始化
     try:
-        # 查询数据库，获取任务状态
-        tasks = Task.select().where(Task.id.in_(request.task_ids))
-        # 构造返回值
-        return [{"task_id": str(task.id), "status": task.status} for task in tasks]
-    except Exception as e:
-        logger.error(f"Error during task status query: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        # 启动异步任务
+        threading.Thread(target=start_task_loop, daemon=True).start()
+        ...
+        # logger = get_logger("api")
+        logger.info("API服务启动中...")
 
-@app.post("/image/check", response_model=list[CheckResponse])
-async def check_images(request: CheckRequest):
-    logger.info("Starting image check")
-    try:
-        # 调用服务层函数，构造返回值
-        results = check_images_service(request.filePathList, request.callBackUrl)
-        return results
-    except Exception as e:
-        logger.error(f"Error during image check: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        # 加载配置
+        config = load_config()
 
-@app.post("/audio/check", response_model=list[CheckResponse])
-async def check_audios(request: CheckRequest):
-    logger.info("Starting audio check")
-    try:
-        # 调用服务层函数，构造返回值
-        results = check_audios_service(request.filePathList, request.callBackUrl)
-        return results
-    except Exception as e:
-        logger.error(f"Error during audio check: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        # 初始化审核服务
+        service = ModerationService(config)
 
-@app.post("/video/check", response_model=list[CheckResponse])
-async def check_videos(request: CheckRequest):
-    logger.info("Starting video check")
-    try:
-        # 调用服务层函数，构造返回值
-        results = check_videos_service(request.filePathList, request.callBackUrl)
-        return results
+        # 设置到app状态中
+        app.state.config = config
+        app.state.service = service
+        app.state.logger = logger
+
+        logger.info("API服务启动完成")
+        yield
+
     except Exception as e:
-        logger.error(f"Error during video check: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        logger.error(f"API服务启动失败: {e}")
+        raise
+    finally:
+        # 关闭时清理
+        # if service:
+        #     await service.__aexit__(None, None, None)
+        logger.info("API服务已关闭")
+# 创建FastAPI应用
+app = FastAPI(
+    title="AI内容审核系统",
+    description="基于AgentScope的智能内容审核平台",
+    version="1.0.0",
+    lifespan=lifespan
+)
+
+# 配置CORS
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],  # 生产环境应该限制具体域名
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+app.include_router(check_router, prefix="/api/v1/check")
+app.include_router(moderation_router, prefix="/api/v1/moderate")
+app.include_router(scraper_router, prefix="/api/v1/scraper")
+
+
+@app.get("/index.html", response_class=HTMLResponse)
+async def read_index():
+    with open(os.path.join("static", "index.html")) as f:
+        return f.read()
+
+
+@app.get("/health", summary="健康检查")
+async def health_check():
+    """健康检查接口"""
+    try:
+        service = app.state.service
+        health_status = await service.health_check()
+
+        return {
+            "status": health_status.get("status", "unknown"),
+            "timestamp": health_status.get("timestamp"),
+            "engines": health_status.get("engines", {}),
+            "statistics": health_status.get("statistics", {})
+        }
+    except Exception as e:
+        raise HTTPException(status_code=503, detail=f"服务不可用: {str(e)}")
+
+@app.get("/stats", summary="服务统计")
+async def get_stats():
+    """获取服务统计信息"""
+    try:
+        service = app.state.service
+        stats = service.get_statistics()
+
+        metrics_collector = get_metrics_collector()
+        stats_summary = metrics_collector.get_stats_summary()
+
+        return {
+            "service_stats": stats,
+            "metrics_summary": stats_summary
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"统计信息获取失败: {str(e)}")
+
+
+if __name__ == '__main__':
+    ...

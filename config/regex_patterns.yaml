@@ -1,0 +1,384 @@
+# 正则表达式规则配置
+
+patterns:
+  # 手机号码
+  phone:
+    name: "手机号码"
+    pattern: "1[3-9]\\d{9}"
+    category: "privacy"
+    risk_level: 0.3
+    enabled: true
+    description: "中国大陆手机号码"
+    example: "13812345678"
+    
+  # 身份证号
+  id_card:
+    name: "身份证号"
+    pattern: "\\d{17}[\\dXx]"
+    category: "privacy"
+    risk_level: 0.8
+    enabled: true
+    description: "中国大陆身份证号"
+    example: "110101199001011234"
+    
+  # 银行卡号
+  bank_card:
+    name: "银行卡号"
+    pattern: "\\d{16,19}"
+    category: "privacy"
+    risk_level: 0.7
+    enabled: true
+    description: "银行卡号码"
+    example: "6222021234567890123"
+    
+  # 邮箱地址
+  email:
+    name: "邮箱地址"
+    pattern: "[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\\.[a-zA-Z]{2,}"
+    category: "privacy"
+    risk_level: 0.2
+    enabled: true
+    description: "电子邮箱地址"
+    example: "user@example.com"
+    
+  # 网址链接
+  url:
+    name: "网址链接"
+    pattern: "https?://[^\\s]+"
+    category: "spam"
+    risk_level: 0.3
+    enabled: true
+    description: "HTTP/HTTPS链接"
+    example: "https://example.com"
+    
+  # QQ号码
+  qq:
+    name: "QQ号码"
+    pattern: "[1-9]\\d{4,10}"
+    category: "privacy"
+    risk_level: 0.3
+    enabled: true
+    description: "QQ号码"
+    example: "123456789"
+    
+  # 微信号
+  wechat:
+    name: "微信号"
+    pattern: "[a-zA-Z]([a-zA-Z0-9_-]){5,19}"
+    category: "privacy"
+    risk_level: 0.3
+    enabled: true
+    description: "微信号"
+    example: "wechat_user123"
+    
+  # IP地址
+  ip_address:
+    name: "IP地址"
+    pattern: "\\b(?:[0-9]{1,3}\\.){3}[0-9]{1,3}\\b"
+    category: "privacy"
+    risk_level: 0.4
+    enabled: true
+    description: "IPv4地址"
+    example: "192.168.1.1"
+    
+  # 车牌号
+  license_plate:
+    name: "车牌号"
+    pattern: "[京津沪渝冀豫云辽黑湘皖鲁新苏浙赣鄂桂甘晋蒙陕吉闽贵粤青藏川宁琼使领A-Z]{1}[A-Z]{1}[A-Z0-9]{4}[A-Z0-9挂学警港澳]{1}"
+    category: "privacy" 
+    risk_level: 0.5
+    enabled: true
+    description: "中国车牌号"
+    example: "京A12345"
+    
+  # 价格信息
+  price:
+    name: "价格信息"
+    pattern: "￥\\s*\\d+(\\.\\d+)?|\\d+(\\.\\d+)?\\s*元"
+    category: "spam"
+    risk_level: 0.2
+    enabled: true
+    description: "价格信息"
+    example: "￥100 或 100元"
+    
+  # 联系方式关键词
+  contact_keywords:
+    name: "联系方式关键词"
+    pattern: "(联系|咨询|加我|私聊|扫码|关注|微信|QQ|电话|手机)"
+    category: "spam"
+    risk_level: 0.4
+    enabled: true
+    description: "常见的联系方式关键词"
+    example: "加我微信"
+    
+  # 营销词汇
+  marketing_keywords:
+    name: "营销词汇"
+    pattern: "(免费|优惠|折扣|限时|抢购|秒杀|代理|招商|加盟|赚钱|兼职)"
+    category: "spam"
+    risk_level: 0.3
+    enabled: true
+    description: "常见营销词汇"
+    example: "免费领取"
+    
+  # 涉政词汇
+  political_keywords:
+    name: "涉政词汇"
+    pattern: "(政府|党|领导|官员|政策|法规|国家|民族|宗教)"
+    category: "political"
+    risk_level: 0.6
+    enabled: true
+    description: "可能涉及政治的词汇"
+    example: "政府政策"
+    
+  # 领导人变形表达
+  leader_variants:
+    name: "领导人变形表达"
+    pattern: "(?i)(x\\s*j\\s*p|c\\s*x\\s*j\\s*p|习\\s*近\\s*平|主\\s*席|总\\s*书\\s*记)"
+    category: "political"
+    risk_level: 0.9
+    enabled: true
+    description: "对领导人的变形表达"
+    example: "x j p, c xjp"
+    
+  # 反动词汇组合
+  seditious_combinations:
+    name: "反动词汇组合"
+    pattern: "(?i)(打\\s*倒|推\\s*翻|颠\\s*覆|反\\s*对).{0,10}(x\\s*j\\s*p|习\\s*近\\s*平|党|政\\s*府|共\\s*产\\s*党)"
+    category: "political"
+    risk_level: 1.0
+    enabled: true
+    description: "反动词汇与敏感对象的组合"
+    example: "打 倒 x j p"
+    
+  # 政治敏感缩写
+  political_abbreviations:
+    name: "政治敏感缩写"
+    pattern: "(?i)(ccp|tg|fg|64|flg)"
+    category: "political"
+    risk_level: 0.8
+    enabled: true
+    description: "政治敏感词汇的缩写形式"
+    example: "ccp, tg, fg"
+    
+  # 分离符干扰
+  separator_interference:
+    name: "分离符干扰"
+    pattern: "([a-zA-Z\\u4e00-\\u9fa5])\\s+([a-zA-Z\\u4e00-\\u9fa5])\\s+([a-zA-Z\\u4e00-\\u9fa5])"
+    category: "evasion"
+    risk_level: 0.5
+    enabled: true
+    description: "使用空格分离字符的干扰手法"
+    example: "x j p, 打 倒"
+    
+  # 特殊字符替换
+  special_char_replacement:
+    name: "特殊字符替换"
+    pattern: "[a-zA-Z0-9\\u4e00-\\u9fa5]*[^a-zA-Z0-9\\u4e00-\\u9fa5\\s][a-zA-Z0-9\\u4e00-\\u9fa5]*"
+    category: "evasion"
+    risk_level: 0.3
+    enabled: true
+    description: "使用特殊字符替换的规避手法"
+    example: "习*近*平"
+    
+  # 敏感日期
+  sensitive_dates:
+    name: "敏感日期"
+    pattern: "(6\\s*[·.]\\s*4|六\\s*四|8\\s*9|天\\s*安\\s*门)"
+    category: "political"
+    risk_level: 0.9
+    enabled: true
+    description: "政治敏感日期和事件"
+    example: "6.4, 六四, 89"
+    
+  # 政治口号
+  political_slogans:
+    name: "政治口号"
+    pattern: "(民\\s*主|自\\s*由|人\\s*权|革\\s*命|起\\s*义|暴\\s*动)"
+    category: "political"
+    risk_level: 0.7
+    enabled: true
+    description: "政治相关口号和词汇"
+    example: "民主, 自由, 人权"
+    
+  # 分裂主义
+  separatism:
+    name: "分裂主义"
+    pattern: "(台\\s*独|港\\s*独|藏\\s*独|疆\\s*独|分\\s*裂|独\\s*立)"
+    category: "political"
+    risk_level: 0.9
+    enabled: true
+    description: "分裂主义相关词汇"
+    example: "台独, 港独, 分裂"
+    
+  # 反政府词汇
+  anti_government:
+    name: "反政府词汇"
+    pattern: "(反\\s*华|反\\s*党|反\\s*政\\s*府|颠\\s*覆|推\\s*翻)"
+    category: "political"
+    risk_level: 0.9
+    enabled: true
+    description: "反政府相关词汇"
+    example: "反华, 反党, 颠覆"
+    
+  # 暴力威胁
+  violence_threats:
+    name: "暴力威胁"
+    pattern: "(杀\\s*死|杀\\s*害|炸\\s*死|弄\\s*死|干\\s*掉)"
+    category: "violence"
+    risk_level: 0.9
+    enabled: true
+    description: "暴力威胁相关词汇"
+    example: "杀死, 炸死"
+    
+  # 恐怖主义
+  terrorism:
+    name: "恐怖主义"
+    pattern: "(恐\\s*怖|炸\\s*弹|爆\\s*炸|袭\\s*击|暗\\s*杀)"
+    category: "violence"
+    risk_level: 1.0
+    enabled: true
+    description: "恐怖主义相关词汇"
+    example: "恐怖, 炸弹, 爆炸"
+    
+  # 同音字影射
+  homophone_innuendo:
+    name: "同音字影射"
+    pattern: "(习近平\\s*猪|习\\s*🐷|习\\s*大\\s*大\\s*🐷|包\\s*子|维\\s*尼|小\\s*熊\\s*维\\s*尼)"
+    category: "political"
+    risk_level: 1.0
+    enabled: true
+    description: "使用同音字或表情符号影射领导人"
+    example: "习近平猪, 习🐷, 包子"
+    
+  # 表情符号政治隐喻
+  emoji_political:
+    name: "表情符号政治隐喻"
+    pattern: "(🐷|🐻|🐼)(?=.*?(习|政|领|官))|(?:习|政|领|官).*?(🐷|🐻|🐼)"
+    category: "political"
+    risk_level: 0.9
+    enabled: true
+    description: "表情符号与政治内容的结合"
+    example: "🐷, 🐻, 🐼 配合政治词汇"
+    
+  # 动物代称政治人物
+  animal_political_reference:
+    name: "动物代称政治人物"
+    pattern: "(猪\\s*头|熊\\s*包\\s*子|猪\\s*包\\s*子)"
+    category: "political"
+    risk_level: 0.8
+    enabled: true
+    description: "用动物名称代指政治人物"
+    example: "猪头, 熊包子"
+    
+  # 文字拆分规避
+  text_splitting_evasion:
+    name: "文字拆分规避"
+    pattern: "(打\\s*将\\s*倒|倒\\s*将\\s*打|推\\s*将\\s*翻|翻\\s*将\\s*推)"
+    category: "political"
+    risk_level: 0.9
+    enabled: true
+    description: "通过插入冗余字符拆分敏感词"
+    example: "打将倒, 推将翻"
+    
+  # 拼音混合隐晦表达
+  pinyin_mixed_evasion:
+    name: "拼音混合隐晦表达"
+    pattern: "(继\\s*xi\\s*续|xi\\s*续|da\\s*推\\s*da|推\\s*da|倒\\s*xi|xi\\s*倒)"
+    category: "political"
+    risk_level: 0.8
+    enabled: true
+    description: "中文与拼音混合的隐晦表达"
+    example: "继xi续, da推da, 倒xi"
+    
+  # 复杂拆分组合
+  complex_splitting_combo:
+    name: "复杂拆分组合"
+    pattern: "(打\\s*将\\s*倒\\s*继\\s*xi|倒\\s*继\\s*xi\\s*续|xi\\s*续\\s*da\\s*推\\s*da)"
+    category: "political"
+    risk_level: 1.0
+    enabled: true
+    description: "复杂的文字拆分和拼音混合组合"
+    example: "打将倒继xi, xi续da推da"
+
+# 规则组合（多个模式的组合检测）
+combinations:
+  # 联系方式组合
+  contact_combo:
+    name: "联系方式组合"
+    patterns:
+      - "contact_keywords"
+      - "phone"
+    risk_level: 0.7
+    description: "联系方式关键词 + 手机号"
+    
+  # 营销组合
+  marketing_combo:
+    name: "营销组合"
+    patterns:
+      - "marketing_keywords"
+      - "price"
+    risk_level: 0.5
+    description: "营销词汇 + 价格信息"
+    
+  # 政治敏感组合
+  political_combo:
+    name: "政治敏感组合"
+    patterns:
+      - "leader_variants"
+      - "seditious_combinations"
+    risk_level: 1.0
+    description: "领导人 + 反动词汇组合"
+    
+  # 规避检测组合
+  evasion_combo:
+    name: "规避检测组合"
+    patterns:
+      - "separator_interference"
+      - "political_keywords"
+    risk_level: 0.8
+    description: "分离符干扰 + 政治词汇"
+
+# 匹配配置
+matching:
+  # 是否忽略大小写
+  ignore_case: true
+  
+  # 是否多行匹配
+  multiline: true
+  
+  # 是否点号匹配所有字符
+  dotall: false
+  
+  # 最大匹配数量（防止性能问题）
+  max_matches: 100
+
+# 白名单（不触发检测的模式）
+whitelist_patterns:
+  # 常见的安全网址
+  safe_urls:
+    - "https?://(www\\.)?(baidu|google|tencent|alibaba)\\.com.*"
+    - "https?://[^/]*\\.(gov|edu)\\.cn.*"
+  
+  # 客服电话
+  service_phones:
+    - "400\\d{7}"
+    - "95\\d{3,5}"
+    
+  # 新闻报道白名单
+  news_whitelist:
+    - "新华社.*报道"
+    - "据.*消息"
+    - "官方.*表示"
+    - "政府.*发布"
+
+# 性能优化配置
+performance:
+  # 是否启用预编译
+  precompile: true
+  
+  # 超时设置（毫秒）
+  timeout: 1000
+  
+  # 是否并行匹配
+  parallel: true 
