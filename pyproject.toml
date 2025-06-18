@@ -1,0 +1,18 @@
+[project]
+name = "security-check"
+version = "0.1.0"
+description = "Add your description here"
+requires-python = ">=3.12"
+dependencies = [
+    "aiohttp>=3.12.13",
+    "aliyun-python-sdk-core-v3==2.13.10",
+    "aliyun-python-sdk-green==3.5.0",
+    "fastapi>=0.115.12",
+    "gmssl>=3.2.2",
+    "loguru>=0.7.3",
+    "oss2>=2.19.1",
+    "peewee>=3.18.1",
+    "pydantic>=2.11.6",
+    "pydantic-settings>=2.9.1",
+    "uvicorn>=0.34.3",
+]
