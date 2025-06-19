@@ -8,6 +8,7 @@ dependencies = [
     "aiohttp>=3.12.13",
     "aliyun-python-sdk-core-v3==2.13.10",
     "aliyun-python-sdk-green==3.5.0",
+    "fake-useragent>=2.2.0",
     "fastapi>=0.115.12",
     "gmssl>=3.2.2",
     "loguru>=0.7.3",
@@ -18,4 +19,5 @@ dependencies = [
     "pydantic-settings>=2.9.1",
     "pyyaml>=6.0.2",
     "uvicorn>=0.34.3",
+    "xpinyin>=0.7.7",
 ]

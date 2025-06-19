@@ -385,6 +385,15 @@ wheels = [
 ]
 
 [[package]]
+name = "fake-useragent"
+version = "2.2.0"
+source = { registry = "https://pypi.tuna.tsinghua.edu.cn/simple" }
+sdist = { url = "https://pypi.tuna.tsinghua.edu.cn/packages/41/43/948d10bf42735709edb5ae51e23297d034086f17fc7279fef385a7acb473/fake_useragent-2.2.0.tar.gz", hash = "sha256:4e6ab6571e40cc086d788523cf9e018f618d07f9050f822ff409a4dfe17c16b2", size = 158898 }
+wheels = [
+    { url = "https://pypi.tuna.tsinghua.edu.cn/packages/51/37/b3ea9cd5558ff4cb51957caca2193981c6b0ff30bd0d2630ac62505d99d0/fake_useragent-2.2.0-py3-none-any.whl", hash = "sha256:67f35ca4d847b0d298187443aaf020413746e56acd985a611908c73dba2daa24", size = 161695 },
+]
+
+[[package]]
 name = "fastapi"
 version = "0.115.12"
 source = { registry = "https://pypi.tuna.tsinghua.edu.cn/simple" }
@@ -1447,6 +1456,7 @@ dependencies = [
     { name = "aiohttp" },
     { name = "aliyun-python-sdk-core-v3" },
     { name = "aliyun-python-sdk-green" },
+    { name = "fake-useragent" },
     { name = "fastapi" },
     { name = "gmssl" },
     { name = "loguru" },
@@ -1457,6 +1467,7 @@ dependencies = [
     { name = "pydantic-settings" },
     { name = "pyyaml" },
     { name = "uvicorn" },
+    { name = "xpinyin" },
 ]
 
 [package.metadata]
@@ -1465,6 +1476,7 @@ requires-dist = [
     { name = "aiohttp", specifier = ">=3.12.13" },
     { name = "aliyun-python-sdk-core-v3", specifier = "==2.13.10" },
     { name = "aliyun-python-sdk-green", specifier = "==3.5.0" },
+    { name = "fake-useragent", specifier = ">=2.2.0" },
     { name = "fastapi", specifier = ">=0.115.12" },
     { name = "gmssl", specifier = ">=3.2.2" },
     { name = "loguru", specifier = ">=0.7.3" },
@@ -1475,6 +1487,7 @@ requires-dist = [
     { name = "pydantic-settings", specifier = ">=2.9.1" },
     { name = "pyyaml", specifier = ">=6.0.2" },
     { name = "uvicorn", specifier = ">=0.34.3" },
+    { name = "xpinyin", specifier = ">=0.7.7" },
 ]
 
 [[package]]
@@ -1638,6 +1651,15 @@ dependencies = [
 sdist = { url = "https://pypi.tuna.tsinghua.edu.cn/packages/c9/4a/44d3c295350d776427904d73c189e10aeae66d7f555bb2feee16d1e4ba5a/wsproto-1.2.0.tar.gz", hash = "sha256:ad565f26ecb92588a3e43bc3d96164de84cd9902482b130d0ddbaa9664a85065", size = 53425 }
 wheels = [
     { url = "https://pypi.tuna.tsinghua.edu.cn/packages/78/58/e860788190eba3bcce367f74d29c4675466ce8dddfba85f7827588416f01/wsproto-1.2.0-py3-none-any.whl", hash = "sha256:b9acddd652b585d75b20477888c56642fdade28bdfd3579aa24a4d2c037dd736", size = 24226 },
+]
+
+[[package]]
+name = "xpinyin"
+version = "0.7.7"
+source = { registry = "https://pypi.tuna.tsinghua.edu.cn/simple" }
+sdist = { url = "https://pypi.tuna.tsinghua.edu.cn/packages/6e/3e/41397274f9447ba29a947778b669b6f21717839ed164eba6b68cd168e705/xpinyin-0.7.7.tar.gz", hash = "sha256:89a1f3f12c7119b4526b93360a74fbe48ee24847481a4bab3b4fee8f4536079d", size = 133954 }
+wheels = [
+    { url = "https://pypi.tuna.tsinghua.edu.cn/packages/82/bd/f7865b810ca7cc82fa566ec224786f674aab878d89866370ea7a20063b4c/xpinyin-0.7.7-py3-none-any.whl", hash = "sha256:1317a0140b704e03e5f368c2dc7618887a2fc45cdc288b6d648e2ebabf571f0e", size = 129774 },
 ]
 
 [[package]]

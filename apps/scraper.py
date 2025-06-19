@@ -290,7 +290,7 @@ async def scrape_content(request: ScrapeRequest):
                             for match in matches:
                                 clean_title = re.sub(r'<[^>]+>', '', match).strip()
                                 if len(clean_title) > 10 and clean_title not in titles:
-                                    titles.append(clean_title)
+                                    titles.append(clean_title.split('\n')[0])
                         
                         # 如果没有找到标题，使用默认内容
                         if not titles:

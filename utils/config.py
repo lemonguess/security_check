@@ -26,7 +26,7 @@ class ConfigManager:
     
     def _load_env(self):
         """加载环境变量"""
-        env_path = Path(__file__).parent.parent.parent / ".env"
+        env_path = Path(__file__).parent.parent / ".env"
         if env_path.exists():
             load_dotenv(env_path)
     
@@ -144,4 +144,4 @@ def load_config(config_path: Optional[str] = None) -> Dict[str, Any]:
 
 def get_config(key: str, default: Any = None) -> Any:
     """获取配置值的便捷函数"""
-    return get_config_manager().get(key, default) 
+    return get_config_manager().get(key, default)

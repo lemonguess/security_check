@@ -5,6 +5,25 @@ app:
   name: "AI Content Moderator"
   version: "1.0.0"
   debug: false
+
+# 平台配置
+platform:
+  # 当前使用的平台: aliyun, wangyiyun
+  current: "${PLATFORM:wangyiyun}"
+  
+  # 阿里云配置
+  aliyun:
+    access_key_id: "${ALIYUN_ACCESS_KEY_ID}"
+    access_key_secret: "${ALIYUN_ACCESS_KEY_SECRET}"
+    region: "${ALIYUN_REGION:cn-shanghai}"
+    
+  # 网易云配置
+  wangyiyun:
+    secret_id: "${WANGYIYUN_SECRET_ID}"
+    secret_key: "${WANGYIYUN_SECRET_KEY}"
+    image_business_id: "${IMAGE_BUSINESS_ID}"
+    audio_business_id: "${AUDIO_BUSINESS_ID}"
+    video_business_id: "${VIDEO_BUSINESS_ID}"
   
 # 日志配置
 logging:
@@ -219,4 +238,4 @@ ollama:
   connection:
     max_retries: 3
     retry_delay: 2
-    keep_alive: true 
+    keep_alive: true

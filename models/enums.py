@@ -15,6 +15,13 @@ class TaskType(Enum):
     AUDIO = "audio"
     VIDEO = "video"
 
+class ColumnType(Enum):
+    CurrentPoliticalNews = "时政要闻"
+    CouncilInformation = "国务院信息"
+    IndustryFocus = "行业热点"
+    CompanyDynamic = "川烟动态"
+    MediaReport = "媒体报道"
+
 class RiskLevel(str, Enum):
     """内容风险等级"""
     SAFE = "safe"           # 安全
