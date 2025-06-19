@@ -277,6 +277,11 @@
             border-color: #c41e3a;
         }
         
+        .example-btn.active {
+            background: #e3f2fd;
+            border-color: #2196f3;
+        }
+        
         .tabs {
             display: flex;
             border-bottom: 2px solid #e0e0e0;
@@ -437,9 +442,9 @@
                          <button class="example-btn" onclick="setExampleUrl('https://www.gov.cn/zhengce/index.htm')">
                              📜 政策文件页面
                          </button>
-                         <button class="example-btn" onclick="testScrapingStrategies()" style="background: #e3f2fd; border-color: #2196f3;">
-                             🧪 测试抓取策略
-                         </button>
+<!--                         <button class="example-btn" onclick="testScrapingStrategies()">-->
+<!--                             🧪 测试抓取策略-->
+<!--                         </button>-->
                      </div>
                     
                     <div class="url-input-group">
@@ -541,7 +546,8 @@
     </div>
 
     <script>
-        const API_BASE = 'http://localhost:8000';
+        // const API_BASE = 'http://localhost:8000';
+        const API_BASE = `${window.location.protocol}//${window.location.host}`;
         let fetchedContentList = [];
         let selectedContent = new Set();
         
@@ -604,15 +610,92 @@
             // 添加active类
             event.target.classList.add('active');
             document.getElementById(tabName + 'Tab').classList.add('active');
+
+            // 特殊处理测试抓取策略按钮
+            const testStrategyButton = document.querySelector('button[onclick="testScrapingStrategies()"]');
+            if (testStrategyButton && event.target !== testStrategyButton) {
+                testStrategyButton.style.borderBottomColor = ''; // 恢复默认边框颜色
+            }
+        }
+
+        // 测试抓取策略
+        async function testScrapingStrategies() {
+            showNotification('正在测试不同的抓取策略...', 'info');
+            
+            try {
+                // 测试烟草局API连接
+                const testResponse = await fetch(`${API_BASE}/api/v1/test-tobacco`);
+                const testResult = await testResponse.json();
+                
+                let strategyInfo = '';
+                if (testResult.success) {
+                    strategyInfo = '✅ 真实API可用\n';
+                } else {
+                    strategyInfo = '❌ 真实API不可用\n';
+                }
+                
+                // 测试抓取功能
+                const scrapeResponse = await fetch(`${API_BASE}/api/v1/scrape`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        url: 'http://sc.tobacco.gov.cn/news/shizhengyaowen',
+                        max_items: 3,
+                        content_type: 'news'
+                    })
+                });
+                
+                const scrapeResult = await scrapeResponse.json();
+                if (scrapeResult.success && scrapeResult.data.length > 0) {
+                    const firstItem = scrapeResult.data[0];
+                    if (firstItem.id.startsWith('enhanced_mock_')) {
+                        strategyInfo += '🎯 当前使用：智能模拟数据\n';
+                        strategyInfo += '📊 数据质量：高（基于真实新闻模板）\n';
+                        strategyInfo += '⚡ 响应速度：快\n';
+                        strategyInfo += '🔄 数据更新：动态生成';
+                    } else if (firstItem.id.startsWith('web_')) {
+                        strategyInfo += '🌐 当前使用：网页抓取\n';
+                        strategyInfo += '📊 数据质量：中（依赖网页结构）\n';
+                        strategyInfo += '⚡ 响应速度：中等\n';
+                        strategyInfo += '🔄 数据更新：实时';
+                    } else if (firstItem.id.startsWith('tobacco_')) {
+                        strategyInfo += '🎯 当前使用：真实API\n';
+                        strategyInfo += '📊 数据质量：最高（官方数据）\n';
+                        strategyInfo += '⚡ 响应速度：快\n';
+                        strategyInfo += '🔄 数据更新：实时';
+                    }
+                }
+                
+                // 显示策略信息
+                alert(`抓取策略测试结果：\n\n${strategyInfo}`);
+                
+            } catch (error) {
+                showNotification('策略测试失败：' + error.message, 'error');
+            }
+
+            // 设置测试抓取策略按钮为选中状态
+            const testStrategyButton = document.querySelector('button[onclick="testScrapingStrategies()"]');
+            if (testStrategyButton) {
+                testStrategyButton.style.borderBottomColor = '#c41e3a'; // 设置蓝色边框
+            }
         }
         
                  // 设置示例URL
          function setExampleUrl(url) {
              document.getElementById('urlInput').value = url;
+             // 移除所有按钮的active类
+             document.querySelectorAll('.example-btn').forEach(btn => btn.classList.remove('active'));
+             // 给当前点击的按钮添加active类
+             event.target.classList.add('active');
          }
          
          // 测试抓取策略
          async function testScrapingStrategies() {
+             // 移除所有按钮的active类
+             document.querySelectorAll('.example-btn').forEach(btn => btn.classList.remove('active'));
+             // 给当前点击的按钮添加active类
+             event.target.classList.add('active');
+             
              showNotification('正在测试不同的抓取策略...', 'info');
              
              try {
@@ -1801,4 +1884,4 @@
         }
     </script>
 </body>
-</html> 
+</html>

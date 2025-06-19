@@ -16,16 +16,20 @@ import threading
 
 from utils.metrics import get_metrics_collector
 
+# 全局变量
+config = None
+service = None
+# logger = None
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """应用生命周期管理"""
-    # global config, service, logger
+    global config, service, logger
 
     # 启动时初始化
     try:
         # 启动异步任务
-        threading.Thread(target=start_task_loop, daemon=True).start()
+        # threading.Thread(target=start_task_loop, daemon=True).start()
         ...
         # logger = get_logger("api")
         logger.info("API服务启动中...")
@@ -49,8 +53,8 @@ async def lifespan(app: FastAPI):
         raise
     finally:
         # 关闭时清理
-        # if service:
-        #     await service.__aexit__(None, None, None)
+        if service:
+            await service.__aexit__(None, None, None)
         logger.info("API服务已关闭")
 # 创建FastAPI应用
 app = FastAPI(
@@ -68,9 +72,10 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+app.include_router(scraper_router, prefix="/api/v1")
 app.include_router(check_router, prefix="/api/v1/check")
 app.include_router(moderation_router, prefix="/api/v1/moderate")
-app.include_router(scraper_router, prefix="/api/v1/scraper")
+
 
 
 @app.get("/index.html", response_class=HTMLResponse)

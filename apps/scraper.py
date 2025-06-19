@@ -250,7 +250,7 @@ async def scrape_content(request: ScrapeRequest):
                     # 添加一些模拟媒体文件以增强演示效果
                     if not media_files and "会议" in article.get("title", ""):
                         media_files.append({
-                            "url": "http://sc.tobacco.gov.cn/images/meeting_photo.jpg",
+                            "url": "https://www.gov.cn/yaowen/tupian/202506/W020250619313094211268_ORIGIN.jpg",
                             "type": "image",
                             "status": "pending"
                         })

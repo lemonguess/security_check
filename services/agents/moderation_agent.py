@@ -153,7 +153,11 @@ class ModerationAgent(BaseAgent):
         """初始化Ollama模型"""
         try:
             # 初始化AgentScope
-            agentscope.init()
+            agentscope.init(
+                save_log=False,
+                save_code=False,
+                save_api_invoke=False
+            )
             
             # 创建Ollama模型包装器
             model_name = self.model_config.get("model_name", "qwen2.5:7b")
@@ -188,7 +192,11 @@ class ModerationAgent(BaseAgent):
         """初始化AgentScope标准模型"""
         try:
             # 初始化AgentScope
-            agentscope.init()
+            agentscope.init(
+                save_log=False,
+                save_code=False,
+                save_api_invoke=False
+            )
             
             # 这里可以扩展支持其他模型
             self.logger.warning("标准AgentScope模型未实现，请使用Ollama模型")
