@@ -1,1 +1,2 @@
-# 模型包初始化文件
+from .database import create_tables
+create_tables()

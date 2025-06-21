@@ -54,21 +54,25 @@ class NewsSpider(SpiderBase):
             meta_list.append(meta)
         return meta_list
 
-    def run(self) -> None:
+    def run(self) -> tuple:
         """
         运行爬虫的主要流程。
         :param start_url: 起始 URL
         """
+        success_count, failed_count = 0, 0
         try:
+            
             self.logger.info(f"开始爬取")
             items = self.crawl_list_page()
             self.logger.info(f"成功爬取 {len(items)} 条数据")
             self.logger.info("开始解析数据")
             meta_list = self.parse(items)
             self.logger.info("成功解析数据")
-            self.save_to_database(meta_list)
+            success_count, failed_count = self.save_to_database(meta_list)
             self.logger.info("数据已成功保存到数据库")
         except Exception as e:
             self.logger.error(f"爬虫运行出错: {e}")
+        finally:
+            return success_count, failed_count
 if __name__ == '__main__':
     NewsSpider().run()

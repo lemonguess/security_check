@@ -16,8 +16,9 @@ if __name__ == "__main__":
     TaskType = enums.TaskType
     TaskStatus = enums.TaskStatus
     ColumnType = enums.ColumnType
+    AuditStatus = enums.AuditStatus
 else:
-    from .enums import TaskType, TaskStatus, ColumnType
+    from .enums import TaskType, TaskStatus, ColumnType, AuditStatus
 
 # 数据库连接
 import os
@@ -58,6 +59,7 @@ class Contents(Model):
     html = TextField(null=True)  # 存储原始HTML内容
     content = TextField(null=True)  # 存储去除HTML标签后的纯文本内容
     column_type = CharField(choices=[(t.value, t.name) for t in ColumnType])
+    audit_status = CharField(choices=[(s.value, s.name) for s in AuditStatus], default=AuditStatus.PENDING.value)  # 审核状态
     publish_time = CharField(null=True)
     images = TextField(null=True)  # 存储图片URL列表，JSON格式
     audios = TextField(null=True)  # 存储音频URL列表，JSON格式
@@ -71,14 +73,25 @@ class Contents(Model):
             (('title', 'url'), True),  # 联合唯一键
         )
 
+class Audit(Model):
+    id = AutoField()
+    content = ForeignKeyField(Contents, backref='audits', on_delete='CASCADE')
+    status = CharField(choices=[(s.value, s.name) for s in AuditStatus], default=AuditStatus.PENDING.value)
+    result = TextField(null=True)  # 存储JSON格式的详细审核结果
+    created_at = CustomDateTimeField(default=datetime.now)
+
+    class Meta:
+        database = db
+
 # 创建表
 def create_tables():
     # 强制创建表，包含所有字段
     with db:
-        db.create_tables([Task, Contents], safe=True)
-        print("数据库表创建成功！")
-        print("- Task 表")
-        print("- Contents 表 (包含 images, audios, videos 字段)")
+        db.create_tables([Task, Contents, Audit], safe=True)
+    print("数据库表创建成功！")
+    print("- Task 表")
+    print("- Contents 表 (包含 images, audios, videos 字段)")
+    print("- Audit 表")
 
 if __name__ == "__main__":
     create_tables()

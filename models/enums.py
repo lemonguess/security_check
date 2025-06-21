@@ -14,10 +14,10 @@ class TaskType(Enum):
     IMAGE = "image"
     AUDIO = "audio"
     VIDEO = "video"
+    TEXT = "text"
 
 class ColumnType(Enum):
     CurrentPoliticalNews = "时政要闻"
-    CouncilInformation = "国务院信息"
     IndustryFocus = "行业热点"
     CompanyDynamic = "川烟动态"
     MediaReport = "媒体报道"
@@ -70,3 +70,11 @@ class ActionType(str, Enum):
     REVIEW = "review"       # 人工审核
     MASK = "mask"          # 内容脱敏
     WARNING = "warning"     # 警告
+
+
+class AuditStatus(str, Enum):
+    """审核状态"""
+    PENDING = "pending"     # 待审核
+    APPROVED = "approved"   # 审核通过
+    REJECTED = "rejected"   # 审核失败
+    REVIEWING = "reviewing" # 审核中

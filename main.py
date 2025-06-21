@@ -1,16 +1,17 @@
 import os
 from contextlib import asynccontextmanager
 
-
 from services.moderation_service import ModerationService
 from utils.config import load_config
 from utils.logger import logger
 from fastapi import FastAPI, HTTPException
+from fastapi.staticfiles import StaticFiles
 from starlette.middleware.cors import CORSMiddleware
 from starlette.responses import HTMLResponse
 from apps.checks import check_router
 from apps.moderation import router as moderation_router
 from apps.scraper import router as scraper_router
+from apps.content import router as content_router
 from task import start_task_loop
 import threading
 
@@ -72,19 +73,22 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
-app.include_router(scraper_router, prefix="/api/v1")
+# 挂载静态文件
+app.mount("/static", StaticFiles(directory="static"), name="static")
+
+app.include_router(scraper_router, prefix="/api/v1/scrape")
 app.include_router(check_router, prefix="/api/v1/check")
-app.include_router(moderation_router, prefix="/api/v1/moderate")
+app.include_router(moderation_router, prefix="/api/v1/moderation")
+app.include_router(content_router, prefix="/api/v1/content")
 
 
-
-@app.get("/index.html", response_class=HTMLResponse)
+@app.get("/", response_class=HTMLResponse)
 async def read_index():
     with open(os.path.join("static", "index.html")) as f:
         return f.read()
 
 
-@app.get("/health", summary="健康检查")
+@app.get("/api/v1/health", summary="健康检查")
 async def health_check():
     """健康检查接口"""
     try:
@@ -100,7 +104,7 @@ async def health_check():
     except Exception as e:
         raise HTTPException(status_code=503, detail=f"服务不可用: {str(e)}")
 
-@app.get("/stats", summary="服务统计")
+@app.get("/api/v1/stats", summary="服务统计")
 async def get_stats():
     """获取服务统计信息"""
     try:
@@ -119,4 +123,12 @@ async def get_stats():
 
 
 if __name__ == '__main__':
-    ...
+    import uvicorn
+    import os
+    uvicorn.run(
+        "main:app",
+        host="0.0.0.0",
+        port=6188,
+        reload=True,
+        log_level="info"
+    )

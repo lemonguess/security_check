@@ -8,9 +8,12 @@ import asyncio
 from typing import Dict, Any, List, Optional, Union
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
+import json
+from peewee import DoesNotExist
+from models.database import Audit, Contents, db
 from models.models import (
-    ModerationRequest, 
-    ModerationResult, 
+    ModerationRequest,
+    ModerationResult,
     BatchModerationRequest,
     BatchModerationResult,
     AIResult,
@@ -80,52 +83,55 @@ class ModerationService:
             raise ModerationError(f"引擎初始化失败: {e}")
     
     async def moderate(
-        self, 
-        content: str, 
-        content_id: Optional[str] = None,
-        **kwargs
-    ) -> ModerationResult:
+        self,
+        content_id: int,
+        db_session: Optional[Any] = None  # 数据库会话
+    ) -> dict:
         """审核单条内容"""
         start_time = time.time()
         self.total_requests += 1
         
-        # 生成内容ID
-        if content_id is None:
-            content_id = str(uuid.uuid4())
+        # 1. 根据 content_id 查询内容
+        content_obj = Contents.get_or_none(Contents.id == content_id)
+        if not content_obj:
+            raise ModerationError(f"内容不存在: {content_id}")
         
         try:
             self.logger.info(f"开始审核内容: {content_id}")
             
-            # 创建审核请求
-            request = ModerationRequest(
-                content=content,
-                content_id=content_id,
-                **kwargs
+            # 2. 准备待审核数据
+            content_to_moderate = {
+                "text": content_obj.content,
+                "images": json.loads(content_obj.images) if content_obj.images else [],
+                "audios": json.loads(content_obj.audios) if content_obj.audios else [],
+                "videos": json.loads(content_obj.videos) if content_obj.videos else [],
+            }
+
+            # 3. 并行执行所有类型的审核
+            all_results = await self._run_all_moderations(content_to_moderate)
+
+            # 4. 综合判断最终结果
+            final_decision, final_score = self._get_final_decision(all_results)
+
+            # 5. 构建并存储审核记录
+            audit_record = self._create_audit_record(
+                content_obj, final_decision, all_results
             )
-            
-            # 并行执行AI和规则检测
-            ai_result, rule_result = await self._run_detection_engines(content)
-            
-            # 融合结果
-            fusion_result = await self.fusion_engine.analyze(
-                content, ai_result=ai_result, rule_result=rule_result
-            )
-            
-            # 构建最终结果
-            processing_time = time.time() - start_time
-            result = self._build_moderation_result(
-                request, ai_result, rule_result, fusion_result, processing_time
-            )
-            
+
             # 记录指标
-            self._record_success_metrics(result)
+            # self._record_success_metrics(result) # 可根据需要调整
+
             
             self.logger.info(
-                f"内容审核完成: {content_id}, 风险等级: {result.final_decision.value}, "
-                f"处理时间: {processing_time:.2f}s"
+                f"内容审核完成: {content_id}, 最终决策: {final_decision.value}"
             )
-            
-            return result
+
+            return {
+                "audit_id": audit_record.id,
+                "content_id": content_id,
+                "final_decision": final_decision.value,
+                "details": all_results
+            }
             
         except Exception as e:
             processing_time = time.time() - start_time
@@ -133,9 +139,74 @@ class ModerationService:
             
             self.logger.error(f"内容审核失败: {content_id}, 错误: {e}")
             
-            # 返回保守的错误结果
-            return self._build_error_result(content_id, content, str(e), processing_time)
+            # 返回错误结果
+            return {"error": f"审核失败: {e}"}
     
+    async def _run_all_moderations(self, content_data: dict) -> dict:
+        """并行执行文本、图片、音频、视频的审核"""
+        tasks = {}
+        if content_data.get("text"):
+            tasks["text"] = asyncio.create_task(self._run_detection_engines(content_data["text"]))
+        # 此处添加图片、音频、视频的审核逻辑
+        # for image_url in content_data.get("images", []):
+        #     tasks[f"image:{image_url}"] = asyncio.create_task(self.image_moderation_service.moderate(image_url))
+
+        results = await asyncio.gather(*tasks.values(), return_exceptions=True)
+
+        final_results = {}
+        for task_name, result in zip(tasks.keys(), results):
+            if isinstance(result, Exception):
+                self.logger.error(f"{task_name} 审核失败: {result}")
+                final_results[task_name] = self._get_default_error_result(str(result))
+            else:
+                final_results[task_name] = result
+        return final_results
+
+    def _get_final_decision(self, all_results: dict) -> tuple[RiskLevel, float]:
+        """根据所有审核结果综合判断"""
+        highest_risk = RiskLevel.SAFE
+        highest_score = 0.0
+
+        for result_group in all_results.values():
+            # 假设每个result_group是(ai_result, rule_result)
+            if isinstance(result_group, tuple):
+                 ai_res, rule_res = result_group
+                 fusion_res = self.fusion_engine.process(
+                    content="", ai_result=ai_res, rule_result=rule_res
+                )
+                 if fusion_res.risk_level.value > highest_risk.value:
+                    highest_risk = fusion_res.risk_level
+                 if fusion_res.risk_score > highest_score:
+                    highest_score = fusion_res.risk_score
+            # 可扩展处理其他类型结果
+
+        # 只要有一个不安全，整体就为不安全
+        if highest_risk != RiskLevel.SAFE:
+            return highest_risk, highest_score
+
+        return RiskLevel.SAFE, 0.0
+
+    def _create_audit_record(self, content_obj: Contents, final_decision: RiskLevel, all_results: dict) -> Audit:
+        """创建并保存审核记录到数据库"""
+        # Peewee操作是同步的，不需要在异步方法中特别处理
+        with db.atomic():
+            audit = Audit.create(
+                content=content_obj,
+                status=final_decision.name, # 使用RiskLevel的名称作为状态
+                result=json.dumps(all_results, default=str, ensure_ascii=False)
+            )
+            # 更新内容表的审核状态
+            content_obj.audit_status = final_decision.value
+            content_obj.save()
+        return audit
+
+    def _get_default_error_result(self, error_msg: str):
+        return {
+            "risk_level": RiskLevel.SUSPICIOUS.value,
+            "risk_score": 0.5,
+            "error": error_msg
+        }
+
     async def _run_detection_engines(self, content: str) -> tuple[AIResult, RuleResult]:
         """并行运行检测引擎"""
         tasks = []
@@ -169,12 +240,14 @@ class ModerationService:
         """运行AI检测"""
         try:
             # AI代理的process方法可能是同步的，需要在线程池中运行
-            loop = asyncio.get_event_loop()
-            return await loop.run_in_executor(
-                self.executor, 
-                self.ai_agent.process, 
-                content
-            )
+            if self.ai_agent:
+                loop = asyncio.get_event_loop()
+                return await loop.run_in_executor(
+                    self.executor, 
+                    self.ai_agent.process, 
+                    content
+                )
+            raise ModerationError("AI agent is not enabled")
         except Exception as e:
             self.logger.error(f"AI检测失败: {e}")
             raise
@@ -187,7 +260,11 @@ class ModerationService:
                 risk_score=0.5,
                 risk_reasons=[error_msg],
                 violated_categories=[],
-                processing_time=0.0
+                processing_time=0.0,
+                detailed_analysis="",
+                confidence_score=0.5,
+                reasoning="Error processing",
+                model_name="default_error_model"
             )
         else:  # rule
             return RuleResult(
@@ -196,7 +273,8 @@ class ModerationService:
                 risk_reasons=[error_msg],
                 violated_categories=[],
                 sensitive_matches=[],
-                processing_time=0.0
+                processing_time=0.0,
+                confidence_score=0.0
             )
     
     def _build_moderation_result(
@@ -229,6 +307,7 @@ class ModerationService:
         return ModerationResult(
             content_id=request.content_id,
             original_content=request.content,
+            masked_content=request.content, # Placeholder
             status=ProcessingStatus.COMPLETED,
             ai_result=ai_result,
             rule_result=rule_result,
@@ -243,16 +322,28 @@ class ModerationService:
     
     def _build_error_result(
         self, 
-        content_id: str, 
+        content_id: Optional[str], 
         content: str, 
         error_msg: str, 
         processing_time: float
     ) -> ModerationResult:
         """构建错误结果"""
+        ai_res = self._get_default_result("ai", error_msg)
+        rule_res = self._get_default_result("rule", error_msg)
         return ModerationResult(
-            content_id=content_id,
+            content_id=content_id or "unknown",
             original_content=content,
+            masked_content=content, # Placeholder
             status=ProcessingStatus.FAILED,
+            ai_result=ai_res if isinstance(ai_res, AIResult) else None,
+            rule_result=rule_res if isinstance(rule_res, RuleResult) else None,
+            fusion_result=FusionResult(
+                risk_level=RiskLevel.RISKY, 
+                risk_score=0.7, 
+                violated_categories=[], 
+                risk_reasons=["Error"], 
+                confidence_score=0.0
+            ),
             final_decision=RiskLevel.RISKY,  # 出错时采用保守策略
             final_score=0.7,
             processing_time=processing_time,
@@ -294,8 +385,8 @@ class ModerationService:
         if parallel:
             # 并行处理
             tasks = [
-                self.moderate(content, content_id, **kwargs)
-                for content, content_id in zip(contents, content_ids)
+                self.moderate(int(content_id), **kwargs)
+                for content_id in content_ids
             ]
             
             completed_results = await asyncio.gather(*tasks, return_exceptions=True)
@@ -315,9 +406,9 @@ class ModerationService:
                     results.append(result)
         else:
             # 顺序处理
-            for content, content_id in zip(contents, content_ids):
+            for content_id in content_ids:
                 try:
-                    result = await self.moderate(content, content_id, **kwargs)
+                    result = await self.moderate(int(content_id), **kwargs)
                     results.append(result)
                 except Exception as e:
                     errors.append({
@@ -325,7 +416,7 @@ class ModerationService:
                         "error": str(e),
                         "content": content[:100] + "..." if len(content) > 100 else content
                     })
-                    results.append(self._build_error_result(content_id, content, str(e), 0.0))
+                    results.append(self._build_error_result(content_id, "", str(e), 0.0))
         
         processing_time = time.time() - start_time
         success_count = len([r for r in results if r.status == ProcessingStatus.COMPLETED])
@@ -397,7 +488,8 @@ class ModerationService:
     
     def update_fusion_weights(self, ai_weight: float, rule_weight: float):
         """更新融合引擎权重"""
-        self.fusion_engine.update_weights(ai_weight, rule_weight)
+        self.fusion_engine.ai_weight = ai_weight
+        self.fusion_engine.rule_weight = rule_weight
         self.logger.info(f"融合引擎权重已更新: AI={ai_weight}, 规则={rule_weight}")
     
     async def __aenter__(self):
@@ -406,4 +498,4 @@ class ModerationService:
     
     async def __aexit__(self, exc_type, exc_val, exc_tb):
         """异步上下文管理器出口"""
-        self.executor.shutdown(wait=True) 
+        self.executor.shutdown(wait=True)

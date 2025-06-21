@@ -183,14 +183,14 @@ class SpiderBase(ABC):
             self.logger.error(f"清理HTML内容时出错: {e}")
             return html_content
 
-    def save_to_database(self, data: list) -> None:
+    def save_to_database(self, data: list) -> tuple:
         """
         将爬取的数据保存到数据库。
         :param data: 爬取的数据列表，每个元素应包含content、types、images、audios、videos等字段
         """
         if not data:
             self.logger.warning("没有数据需要保存")
-            return
+            return 0, 0
         
         success_count = 0
         failed_count = 0
@@ -223,6 +223,7 @@ class SpiderBase(ABC):
                     html=html_content,  # 存储原始HTML内容
                     content=clean_content,  # 存储清理后的纯文本内容
                     column_type=content_type,
+                    audit_status='pending',  # 默认为待审核状态
                     publish_time=publish_time,
                     images=images_json,
                     audios=audios_json,
@@ -239,9 +240,10 @@ class SpiderBase(ABC):
                 continue
                 
         self.logger.info(f"批量保存完成，成功: {success_count} 条，失败: {failed_count} 条，总计: {len(data)} 条数据")
+        return success_count, failed_count
 
     @abstractmethod
-    def run(self) -> None:
+    def run(self) -> tuple:
         """
         运行爬虫的主要流程。
         :param start_url: 起始 URL
