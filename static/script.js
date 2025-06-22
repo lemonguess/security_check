@@ -467,8 +467,8 @@ function startCountdownAndRedirect() {
     }
 }
 
-
-
+// 显示策略测试结果
+function showStrategyTestResults(data) {
     const resultsDiv = document.getElementById('testResults');
     resultsDiv.style.display = 'block';
     resultsDiv.innerHTML = `
@@ -498,6 +498,7 @@ function startCountdownAndRedirect() {
             <p>推荐策略: ${data.recommended_strategy || '未知'}</p>
         </div>
     `;
+}
 
 // 提取媒体文件
 function extractMediaFromContent(content) {

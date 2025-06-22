@@ -114,12 +114,30 @@ async def get_stats():
         metrics_collector = get_metrics_collector()
         stats_summary = metrics_collector.get_stats_summary()
 
+        # 格式化为前端期望的数据结构
+        formatted_stats = {
+            "total_requests": stats_summary.get("total_requests", 0),
+            "success_rate": stats_summary.get("success_rate", 0.0),
+            "avg_processing_time": stats_summary.get("avg_processing_time", 0.0),
+            "today_audits": stats_summary.get("today_audits", 0)
+        }
+
         return {
-            "service_stats": stats,
-            "metrics_summary": stats_summary
+            "success": True,
+            "data": formatted_stats,
+            "message": "统计数据获取成功"
         }
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"统计信息获取失败: {str(e)}")
+        return {
+            "success": False,
+            "data": {
+                "total_requests": 0,
+                "success_rate": 0.0,
+                "avg_processing_time": 0.0,
+                "today_audits": 0
+            },
+            "message": f"统计信息获取失败: {str(e)}"
+        }
 
 
 if __name__ == '__main__':
