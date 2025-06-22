@@ -20,7 +20,6 @@ from pydantic import BaseModel, Field, validator
 
 class CheckRequest(BaseModel):
     filePathList: list[str]
-    callBackUrl: str
 
 class CheckResponse(BaseModel):
     file_path: str
@@ -153,7 +152,7 @@ class ModerationResult(BaseModel):
 
 class BatchModerationRequest(BaseModel):
     """批量审核请求"""
-    contents: List[str] = Field(..., description="内容列表", min_items=1, max_items=100)
+    contents: List[str] = Field(..., description="内容列表", min_length=1, max_length=100)
     content_ids: Optional[List[str]] = Field(None, description="内容ID列表")
     metadata: Optional[Dict[str, Any]] = Field(None, description="附加元数据")
     parallel: bool = Field(True, description="是否并行处理")

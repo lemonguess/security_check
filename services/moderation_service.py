@@ -10,7 +10,7 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 
 import json
 from peewee import DoesNotExist
-from models.database import Audit, Contents, db
+from models.database import Contents, db
 from models.models import (
     ModerationRequest,
     ModerationResult,
@@ -113,8 +113,8 @@ class ModerationService:
             # 4. 综合判断最终结果
             final_decision, final_score = self._get_final_decision(all_results)
 
-            # 5. 构建并存储审核记录
-            audit_record = self._create_audit_record(
+            # 5. 保存审核结果到Contents表
+            updated_content = self._save_audit_result(
                 content_obj, final_decision, all_results
             )
 
@@ -127,9 +127,10 @@ class ModerationService:
             )
 
             return {
-                "audit_id": audit_record.id,
                 "content_id": content_id,
                 "final_decision": final_decision.value,
+                "risk_level": final_decision.value,
+                "processing_status": ProcessingStatus.COMPLETED.value,
                 "details": all_results
             }
             
@@ -186,19 +187,21 @@ class ModerationService:
 
         return RiskLevel.SAFE, 0.0
 
-    def _create_audit_record(self, content_obj: Contents, final_decision: RiskLevel, all_results: dict) -> Audit:
-        """创建并保存审核记录到数据库"""
+    def _save_audit_result(self, content_obj: Contents, final_decision: RiskLevel, all_results: dict) -> Contents:
+        """保存审核结果到Contents表"""
+        from models.enums import AuditStatus
         # Peewee操作是同步的，不需要在异步方法中特别处理
         with db.atomic():
-            audit = Audit.create(
-                content=content_obj,
-                status=final_decision.name, # 使用RiskLevel的名称作为状态
-                result=json.dumps(all_results, default=str, ensure_ascii=False)
-            )
-            # 更新内容表的审核状态
-            content_obj.audit_status = final_decision.value
+            # 更新内容表的审核状态和处理结果
+            if final_decision == RiskLevel.SAFE:
+                content_obj.audit_status = AuditStatus.APPROVED.value
+            else:
+                content_obj.audit_status = AuditStatus.REJECTED.value
+            content_obj.risk_level = final_decision.value
+            content_obj.processing_status = ProcessingStatus.COMPLETED.value
+            content_obj.processing_content = json.dumps(all_results, default=str, ensure_ascii=False)
             content_obj.save()
-        return audit
+        return content_obj
 
     def _get_default_error_result(self, error_msg: str):
         return {
@@ -305,7 +308,7 @@ class ModerationService:
             engines_used.append(EngineType.RULE)
         
         return ModerationResult(
-            content_id=request.content_id,
+            content_id=request.content_id or "",
             original_content=request.content,
             masked_content=request.content, # Placeholder
             status=ProcessingStatus.COMPLETED,
@@ -349,7 +352,8 @@ class ModerationService:
             processing_time=processing_time,
             engines_used=[],
             total_matches=0,
-            categories_detected=[]
+            categories_detected=[],
+            detailed_analysis="Error occurred during processing"
         )
     
     def _record_success_metrics(self, result: ModerationResult):
@@ -414,7 +418,7 @@ class ModerationService:
                     errors.append({
                         "content_id": content_id,
                         "error": str(e),
-                        "content": content[:100] + "..." if len(content) > 100 else content
+                        "content": contents[i][:100] + "..." if len(contents[i]) > 100 else contents[i]
                     })
                     results.append(self._build_error_result(content_id, "", str(e), 0.0))
         

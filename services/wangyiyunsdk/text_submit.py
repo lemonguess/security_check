@@ -1,23 +1,31 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 """
-文本异步检测接口示例代码
+调用易盾反垃圾云服务审核系统文本批量提交接口python示例代码
+接口文档: http://dun.163.com/api.html
+python版本：python3.7
+运行:
+    1. 修改 SECRET_ID,SECRET_KEY,BUSINESS_ID 为对应申请到的值
+    2. $ python text_submit.py
 """
+__author__ = 'yidun-dev'
+__date__ = '2019/11/27'
+__version__ = '0.2-dev'
 
 import hashlib
-import json
-import random
 import time
+import random
 import urllib3
 from urllib.parse import urlencode
+import json
 from gmssl import sm3, func
 
 
 class TextSubmitAPIDemo(object):
-    """文本异步检测接口示例代码"""
+    """调用易盾反垃圾云服务审核系统文本批量提交接口示例代码"""
 
-    API_URL = "http://as.dun.163.com/v5/text/async-check"
-    VERSION = "v5.3"
+    API_URL = "http://as.dun.163.com/v5/text/submit"
+    VERSION = "v5"
 
     def __init__(self, secret_id, secret_key, business_id):
         """
@@ -32,18 +40,20 @@ class TextSubmitAPIDemo(object):
         self.http = urllib3.PoolManager()  # 初始化连接池
 
     def gen_signature(self, params=None):
-        """生成签名"""
-        if params is None:
-            params = {}
-        
-        sorted_params = sorted(params.keys())
-        params_str = '&'.join(['%s=%s' % (key, params[key]) for key in sorted_params])
-        
-        sorted_params = sorted(params.keys()) + sorted(self.headers.keys())
-        params_str = '&'.join(['%s=%s' % (key, params[key]) for key in sorted(params.keys())])
-        params_str += '&' + '&'.join(['%s=%s' % (key, self.headers[key]) for key in sorted(self.headers.keys())])
-        
-        return hashlib.md5((params_str + self.secret_key).encode('utf8')).hexdigest()
+        """生成签名信息
+        Args:
+            params (object) 请求参数
+        Returns:
+            参数签名md5值
+        """
+        buff = ""
+        for k in sorted(params.keys()):
+            buff += str(k) + str(params[k])
+        buff += self.secret_key
+        if "signatureMethod" in params.keys() and params["signatureMethod"] == "SM3":
+            return sm3.sm3_hash(func.bytes_to_list(bytes(buff, encoding='utf8')))
+        else:
+            return hashlib.md5(buff.encode("utf8")).hexdigest()
 
     def check(self, params):
         """请求易盾接口
@@ -73,3 +83,42 @@ class TextSubmitAPIDemo(object):
             return json.loads(content)
         except Exception as ex:
             print("调用API接口失败:", str(ex))
+
+
+if __name__ == "__main__":
+    """示例代码入口"""
+    SECRET_ID = "your_secret_id"  # 产品密钥ID，产品标识
+    SECRET_KEY = "your_secret_key"  # 产品私有密钥，服务端生成签名信息使用，请严格保管，避免泄露
+    BUSINESS_ID = "your_business_id"  # 业务ID，易盾根据产品业务特点分配
+    api = TextSubmitAPIDemo(SECRET_ID, SECRET_KEY, BUSINESS_ID)
+
+    # 私有请求参数
+    texts: list = []
+    text1 = {
+        "dataId": "ebfcad1c-dba1-490c-b4de-e784c2691768",
+        "content": "易盾测试内容! v5接口!",
+        "action": "0"
+    }
+    text2 = {
+        "dataId": "ebfcad1c-dba1-490c-b4de-e784c2691768",
+        "content": "批量提交内容! v5接口!",
+        "action": "1"
+    }
+    texts.append(text1)
+    texts.append(text2)
+    params = {
+        "texts": json.dumps(texts)
+    }
+
+    ret = api.check(params)
+
+    code: int = ret["code"]
+    msg: str = ret["msg"]
+    if code == 200:
+        resultArray: list = ret["result"]
+        for result in resultArray:
+            dataId: str = result["dataId"]
+            taskId: str = result["taskId"]
+            print("dataId: %s, 文本提交返回taskId: %s" % (dataId, taskId))
+    else:
+        print("ERROR: code=%s, msg=%s" % (ret["code"], ret["msg"]))

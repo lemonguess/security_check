@@ -17,8 +17,11 @@ if __name__ == "__main__":
     TaskStatus = enums.TaskStatus
     ColumnType = enums.ColumnType
     AuditStatus = enums.AuditStatus
+    ProcessingStatus = enums.ProcessingStatus
+    RiskLevel = enums.RiskLevel
+    ContentCategory = enums.ContentCategory
 else:
-    from .enums import TaskType, TaskStatus, ColumnType, AuditStatus
+    from .enums import TaskType, TaskStatus, ColumnType, AuditStatus, ProcessingStatus, RiskLevel, ContentCategory
 
 # 数据库连接
 import os
@@ -42,7 +45,6 @@ class Task(Model):
     task_id = CharField(null=True)
     type = CharField(choices=[(t.value, t.name) for t in TaskType])  # 任务类型
     status = IntegerField(choices=[(s.value, s.name) for s in TaskStatus])  # 任务状态
-    callback_url = CharField(null=True)  # 回调地址
     content = CharField(null=True)  # 存储任务内容，一般为http链接
     is_compliant = BooleanField(null=True)
     result_text = TextField(null=True)
@@ -64,6 +66,11 @@ class Contents(Model):
     images = TextField(null=True)  # 存储图片URL列表，JSON格式
     audios = TextField(null=True)  # 存储音频URL列表，JSON格式
     videos = TextField(null=True)  # 存储视频URL列表，JSON格式
+    risk_level = CharField(choices=[(l.value, l.name) for l in RiskLevel], default=RiskLevel.SAFE.value)
+    processing_status = CharField(choices=[(s.value, s.name) for s in ProcessingStatus], default=ProcessingStatus.PENDING.value)
+    processing_content = TextField(null=True)  # 处理结果，为 json数据，保存文本、图片、音频、视频等的处理结果和最终结果
+    processing_html = TextField(null=True)  # 将处理结果美化 html的格式
+    category = CharField(choices=[(c.value, c.name) for c in ContentCategory], default=ContentCategory.OTHER.value)
     created_at = CustomDateTimeField(default=datetime.now, help_text="创建时间")
     updated_at = CustomDateTimeField(default=datetime.now, help_text="更新时间")
 
@@ -73,25 +80,16 @@ class Contents(Model):
             (('title', 'url'), True),  # 联合唯一键
         )
 
-class Audit(Model):
-    id = AutoField()
-    content = ForeignKeyField(Contents, backref='audits', on_delete='CASCADE')
-    status = CharField(choices=[(s.value, s.name) for s in AuditStatus], default=AuditStatus.PENDING.value)
-    result = TextField(null=True)  # 存储JSON格式的详细审核结果
-    created_at = CustomDateTimeField(default=datetime.now)
-
-    class Meta:
-        database = db
+# Audit表已删除，相关功能迁移到Contents表中
 
 # 创建表
 def create_tables():
     # 强制创建表，包含所有字段
     with db:
-        db.create_tables([Task, Contents, Audit], safe=True)
-    print("数据库表创建成功！")
-    print("- Task 表")
-    print("- Contents 表 (包含 images, audios, videos 字段)")
-    print("- Audit 表")
+        db.create_tables([Task, Contents], safe=True)
+    # print("数据库表创建成功！")
+    # print("- Task 表")
+    # print("- Contents 表 (包含 images, audios, videos 字段)")
 
 if __name__ == "__main__":
     create_tables()

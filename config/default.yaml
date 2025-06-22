@@ -24,7 +24,8 @@ platform:
     image_business_id: "${IMAGE_BUSINESS_ID}"
     audio_business_id: "${AUDIO_BUSINESS_ID}"
     video_business_id: "${VIDEO_BUSINESS_ID}"
-  
+    text_business_id: "${TEXT_BUSINESS_ID}"
+
 # 日志配置
 logging:
   level: "INFO"

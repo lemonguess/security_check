@@ -39,7 +39,7 @@ else:
     video_query_api = None
     text_query_api = None
 
-def check_images_service(img_path_list, callback_url):
+def check_images_service(img_path_list, callback_url=""):
     if image_create_api is None:
         return [{"error": "Image API not initialized"}]
     
@@ -63,7 +63,6 @@ def check_images_service(img_path_list, callback_url):
                 status=TaskStatus.CREATED.value,
                 create_time=datetime.now(),
                 update_time=datetime.now(),
-                callback_url=callback_url,
                 content=img_path
             )
             results.append({
@@ -79,7 +78,7 @@ def check_images_service(img_path_list, callback_url):
             })
     return results
 
-def check_audios_service(audio_path_list, callback_url):
+def check_audios_service(audio_path_list, callback_url=""):
     if audio_create_api is None:
         return [{"error": "Audio API not initialized"}]
     
@@ -100,7 +99,6 @@ def check_audios_service(audio_path_list, callback_url):
                 status=TaskStatus.CREATED.value,
                 create_time=datetime.now(),
                 update_time=datetime.now(),
-                callback_url=callback_url,
                 content=audio_path
             )
             results.append({
@@ -116,7 +114,7 @@ def check_audios_service(audio_path_list, callback_url):
             })
     return results
 
-def check_videos_service(video_path_list, callback_url):
+def check_videos_service(video_path_list, callback_url=""):
     if video_create_api is None:
         return [{"error": "Video API not initialized"}]
     
@@ -137,7 +135,6 @@ def check_videos_service(video_path_list, callback_url):
                 status=TaskStatus.CREATED.value,
                 create_time=datetime.now(),
                 update_time=datetime.now(),
-                callback_url=callback_url,
                 content=video_path
             )
             results.append({
@@ -207,21 +204,24 @@ def query_task(task_id, task_type):
         raise Exception(f"Error querying task: {error_msg}")
 
 
-def check_text_service(text_content, callback_url):
+def check_text_service(text_content, callback_url=""):
     """文本审核服务"""
     if text_create_api is None:
         return {"error": "Text API not initialized"}
     
     data_id = str(uuid.uuid4())
-    params = {
+    _params = {
         "dataId": data_id,
-        "content": text_content
+        "content": text_content,
+        "action": "0"
     }
-    
+    params = {
+        "texts": json.dumps([_params])
+    }
     try:
         res = text_create_api.check(params)
         if res and res.get("code") == 200:
-            task_id = res["result"]["taskId"]
+            task_id = res["result"][0]["taskId"]
             Task.create(
                 id=data_id,
                 task_id=task_id,
@@ -229,7 +229,6 @@ def check_text_service(text_content, callback_url):
                 status=TaskStatus.CREATED.value,
                 create_time=datetime.now(),
                 update_time=datetime.now(),
-                callback_url=callback_url,
                 content=text_content
             )
             return {
@@ -241,7 +240,7 @@ def check_text_service(text_content, callback_url):
             return {
                 "task_id": None,
                 "data_id": data_id,
-                "msg": f"Error: {res.get('msg', 'Unknown error')}"
+                "msg": f"Error: {res.get('msg', 'Unknown error') if res else 'No response'}"
             }
     except Exception as e:
         return {

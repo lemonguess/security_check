@@ -50,7 +50,7 @@ pip install -r requirements.txt
 | status       | IntegerField | 任务状态（0:创建,1:成功,2:失败）|
 | create_time  | DateTimeField| 任务创建时间                 |
 | update_time  | DateTimeField| 任务更新时间                 |
-| callback_url | CharField    | 回调地址（可选）             |
+
 | content      | CharField    | 待检测内容的URL              |
 
 ### 枚举定义

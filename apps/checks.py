@@ -32,7 +32,7 @@ async def check_images(request: CheckRequest):
     logger.info("Starting image check")
     try:
         # 调用服务层函数，构造返回值
-        results = check_images_service(request.filePathList, request.callBackUrl)
+        results = check_images_service(request.filePathList)
         return results
     except Exception as e:
         logger.error(f"Error during image check: {e}")
@@ -43,7 +43,7 @@ async def check_audios(request: CheckRequest):
     logger.info("Starting audio check")
     try:
         # 调用服务层函数，构造返回值
-        results = check_audios_service(request.filePathList, request.callBackUrl)
+        results = check_audios_service(request.filePathList)
         return results
     except Exception as e:
         logger.error(f"Error during audio check: {e}")
@@ -54,7 +54,7 @@ async def check_videos(request: CheckRequest):
     logger.info("Starting video check")
     try:
         # 调用服务层函数，构造返回值
-        results = check_videos_service(request.filePathList, request.callBackUrl)
+        results = check_videos_service(request.filePathList)
         return results
     except Exception as e:
         logger.error(f"Error during video check: {e}")

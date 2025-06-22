@@ -743,6 +743,11 @@ body {
     color: #721c24;
 }
 
+.status-reviewing {
+    background: #cce5ff;
+    color: #004085;
+}
+
 .batch-controls {
     display: flex;
     align-items: center;

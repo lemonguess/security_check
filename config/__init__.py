@@ -19,7 +19,8 @@ class Settings:
             'WANGYIYUN_SECRET_KEY': 'platform.wangyiyun.secret_key',
             'IMAGE_BUSINESS_ID': 'platform.wangyiyun.image_business_id',
             'AUDIO_BUSINESS_ID': 'platform.wangyiyun.audio_business_id',
-            'VIDEO_BUSINESS_ID': 'platform.wangyiyun.video_business_id'
+            'VIDEO_BUSINESS_ID': 'platform.wangyiyun.video_business_id',
+            'TEXT_BUSINESS_ID': 'platform.wangyiyun.text_business_id'
         }
         
         if name in key_mapping:

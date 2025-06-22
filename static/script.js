@@ -732,7 +732,7 @@ function displayContentList(contentList) {
                 <div id="result_${item.id}" style="margin-top: 8px;"></div>
             </div>
             <div style="margin-left: 15px;">
-                <button onclick="auditSingleItem('${item.id}')" class="btn btn-primary" style="padding: 5px 10px; font-size: 12px;">审核</button>
+                <button onclick="auditSingleItem('${item.id}')" class="btn btn-primary" style="padding: 5px 10px; font-size: 12px;">${getAuditButtonText(item.audit_status || item.status)}</button>
             </div>
         `;
         
@@ -821,6 +821,7 @@ function getDetailedResultHtml(result) {
 // 审核单个项目
 async function auditSingleItem(contentId) {
     const button = event.target;
+    const originalText = button.textContent;
     button.disabled = true;
     button.textContent = '审核中...';
 
@@ -830,9 +831,11 @@ async function auditSingleItem(contentId) {
     } catch (error) {
         console.error(`审核内容 #${contentId} 失败:`, error);
         displayAuditResult(contentId, { success: false, message: error.message });
+        // 审核失败时恢复原始按钮文本
+        button.textContent = originalText;
     } finally {
         button.disabled = false;
-        button.textContent = '审核';
+        // 注意：成功时按钮文本会在updateStatusLabel中更新，这里不需要设置
     }
 }
 
@@ -1235,6 +1238,7 @@ async function fetchAuditContent() {
         if (result.success) {
             auditContentList = (result.data.items || []).map(item => ({
                 ...item,
+                audit_status: item.audit_status || 'pending',  // 确保每个项目都有审核状态
                 status: item.status || 'pending'  // 确保每个项目都有默认状态
             }));
             auditTotalRecords = result.data.total || 0;
@@ -1324,6 +1328,17 @@ function generateMockAuditContent() {
     }));
 }
 
+// 获取状态样式类
+function getStatusClass(status) {
+    const statusClasses = {
+        'approved': 'status-approved',
+        'rejected': 'status-rejected', 
+        'reviewing': 'status-reviewing',
+        'pending': 'status-pending'
+    };
+    return statusClasses[status] || 'status-pending';
+}
+
 // 显示审核内容列表
 function displayAuditContentList(items = null) {
     const listElement = document.getElementById('auditContentList');
@@ -1373,7 +1388,7 @@ function displayAuditContentList(items = null) {
                 <div id="audit_result_${item.id}" class="audit-details-container" style="margin-top: 8px;"></div>
             </div>
             <div style="margin-left: 15px;">
-                <button onclick="auditSingleItem('${item.id}')" class="btn btn-primary" style="padding: 5px 10px; font-size: 12px;">审核</button>
+                <button onclick="auditSingleItem('${item.id}')" class="btn btn-primary" style="padding: 5px 10px; font-size: 12px;">${getAuditButtonText(item.audit_status || item.status)}</button>
             </div>
         `;
         
@@ -1420,6 +1435,9 @@ function toggleSelectAll() {
     console.log('toggleSelectAll调用，isChecked:', isChecked);
     console.log('当前auditContentList:', auditContentList);
     
+    // 清空当前选择状态
+    auditSelectedContent.clear();
+    
     // 使用auditContentList
     if (auditContentList && auditContentList.length > 0) {
         auditContentList.forEach(item => {
@@ -1429,9 +1447,9 @@ function toggleSelectAll() {
                 const stringId = String(item.id);
                 if (isChecked) {
                     auditSelectedContent.add(stringId);
-                } else {
-                    auditSelectedContent.delete(stringId);
                 }
+                // 手动触发change事件，确保其他逻辑正确执行
+                checkbox.dispatchEvent(new Event('change'));
             }
         });
     }
@@ -1500,9 +1518,15 @@ async function performBatchAudit() {
         return;
     }
 
-    const auditButton = document.getElementById('auditSelectedBtn');
-    auditButton.disabled = true;
-    auditButton.innerHTML = '<span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span> 审核中...';
+    // 先将所有选中项的右侧审核按钮更新为"审核中..."
+    selectedIds.forEach(contentId => {
+        const auditButton = document.querySelector(`button[onclick="auditSingleItem('${contentId}')"]`);
+        if (auditButton) {
+            auditButton.disabled = true;
+            auditButton.textContent = '审核中...';
+        }
+        updateStatusLabel(contentId, 'reviewing');
+    });
 
     try {
         const result = await moderateContentByIds(selectedIds);
@@ -1518,9 +1542,15 @@ async function performBatchAudit() {
     } catch (error) {
         console.error('批量审核失败:', error);
         showNotification(`批量审核失败: ${error.message}`, 'error');
-    } finally {
-        auditButton.disabled = false;
-        auditButton.textContent = '审核选中';
+        // 审核失败时，将状态和按钮恢复为待审核
+        selectedIds.forEach(contentId => {
+            updateStatusLabel(contentId, 'pending');
+            const auditButton = document.querySelector(`button[onclick="auditSingleItem('${contentId}')"]`);
+            if (auditButton) {
+                auditButton.disabled = false;
+                auditButton.textContent = '审核';
+            }
+        });
     }
 }
 
@@ -1586,7 +1616,15 @@ function displayAuditResult(contentId, result) {
         }
 
         resultDiv.innerHTML = createAuditResultCard(contentId, auditData);
-        updateStatusLabel(contentId, auditData.final_decision);
+        // 将后端返回的大写状态转换为小写
+        const statusMapping = {
+            'APPROVED': 'approved',
+            'REJECTED': 'rejected',
+            'REVIEWING': 'reviewing',
+            'PENDING': 'pending'
+        };
+        const frontendStatus = statusMapping[auditData.final_decision] || 'pending';
+        updateStatusLabel(contentId, frontendStatus);
     } else {
         resultDiv.innerHTML = `<div class="alert alert-danger">审核失败: ${result ? result.message : '未知错误'}</div>`;
         updateStatusLabel(contentId, 'rejected');
@@ -1599,16 +1637,31 @@ function updateStatusLabel(contentId, status) {
     if (!statusElement) return;
 
     const statusMap = {
-        'safe': { text: '审核通过', class: 'status-approved' },
-        'review': { text: '待复审', class: 'status-review' },
-        'reject': { text: '审核失败', class: 'status-rejected' },
-        'pending': { text: '待审核', class: 'status-pending' }
+        'approved': { text: '审核通过', class: 'status-approved', audit_status: 'approved' },
+        'reviewing': { text: '审核中...', class: 'status-reviewing', audit_status: 'reviewing' },
+        'rejected': { text: '审核不通过', class: 'status-rejected', audit_status: 'rejected' },
+        'pending': { text: '待审核', class: 'status-pending', audit_status: 'pending' }
     };
 
     const newStatus = statusMap[status] || statusMap['pending'];
 
     statusElement.textContent = newStatus.text;
     statusElement.className = `status ${newStatus.class}`;
+    
+    // 更新按钮文本和状态
+    const auditButton = document.querySelector(`button[onclick="auditSingleItem('${contentId}')"]`);
+    if (auditButton) {
+        auditButton.textContent = getAuditButtonText(newStatus.audit_status);
+        auditButton.disabled = false; // 确保按钮可用
+    }
+    
+    // 更新内存中的数据状态
+    if (window.currentAuditContentList) {
+        const item = window.currentAuditContentList.find(item => item.id == contentId);
+        if (item) {
+            item.audit_status = newStatus.audit_status;
+        }
+    }
 }
 
 function createAuditResultCard(contentId, auditData) {
@@ -1629,7 +1682,6 @@ function createAuditResultCard(contentId, auditData) {
             <p class="card-text">
                 <strong>最终决策:</strong> 
                 <span class="fw-bold ${getRiskLevelClass(final_decision)}">${final_decision || 'N/A'}</span>
-                <span class="ms-3"><strong>置信度:</strong> ${(confidence_score * 100).toFixed(2) || 'N/A'}%</span>
             </p>
             ${fusionResult?.risk_reasons?.length > 0 ? `<p class="card-text"><strong>风险原因:</strong> ${fusionResult.risk_reasons.join(', ')}</p>` : ''}
         </div>
@@ -1642,7 +1694,6 @@ function createAuditResultCard(contentId, auditData) {
                 <div class="border p-2 rounded h-100">
                     <h6 class="text-muted">${title}</h6>
                     <p class="mb-1"><strong>风险等级:</strong> <span class="${getRiskLevelClass(engineData.risk_level)}">${engineData.risk_level || 'N/A'}</span></p>
-                    <p class="mb-1"><strong>置信度:</strong> ${(engineData.confidence_score * 100).toFixed(2) || 'N/A'}%</p>
                     ${engineData.keywords_found?.length > 0 ? `<p class="mb-1"><strong>命中关键词:</strong> ${engineData.keywords_found.join(', ')}</p>` : ''}
                 </div>
             </div>
@@ -1651,7 +1702,7 @@ function createAuditResultCard(contentId, auditData) {
 
     const detailsSection = `
         <div class="mt-3">
-            <a href="#" onclick="event.preventDefault(); toggleDetails('${detailsId}')">查看原始JSON</a>
+            <a href="#" onclick="event.preventDefault(); viewReport('${contentId || 'unknown'}')">查看报告</a>
             <div id="${detailsId}" style="display: none; margin-top: 8px; padding: 10px; border: 1px solid #e0e0e0; background-color: #f8f9fa; border-radius: 4px; max-height: 300px; overflow-y: auto;">
                 <pre><code>${JSON.stringify(auditData, null, 2)}</code></pre>
             </div>
@@ -1839,18 +1890,6 @@ function displayAuditContent(items) {
             `<a href="${item.url}" target="_blank" style="color: #c41e3a; text-decoration: none; font-weight: bold;" onmouseover="this.style.textDecoration='underline'" onmouseout="this.style.textDecoration='none'">${item.title}</a>` :
             `<span style="font-weight: bold;">${item.title}</span>`;
 
-        const getStatusClass = (status) => {
-            const statusClasses = {
-                'safe': 'status-approved',
-                'approved': 'status-approved',
-                'review': 'status-review',
-                'reject': 'status-rejected',
-                'rejected': 'status-rejected',
-                'pending': 'status-pending'
-            };
-            return statusClasses[status] || 'status-pending';
-        };
-
         const isSelected = auditSelectedContent.has(String(item.id));
 
         itemDiv.innerHTML = `
@@ -1860,7 +1899,7 @@ function displayAuditContent(items) {
             <div style="flex: 1;">
                 <div style="margin-bottom: 8px;">
                     <span style="background: #f0f0f0; padding: 2px 6px; border-radius: 3px; font-size: 12px; color: #666; margin-right: 8px;">[${item.column_type}]</span>
-                    <span id="status_${item.id}" class="status ${getStatusClass(item.status || 'pending')}">${getStatusText(item.status || 'pending')}</span>
+                    <span id="status_${item.id}" class="status ${getStatusClass(item.audit_status || item.status || 'pending')}">${getStatusText(item.audit_status || item.status || 'pending')}</span>
                     ${titleLink}
                 </div>
                 ${item.created_at ? `<div style="font-size: 12px; color: #999; margin-bottom: 5px;">📅 ${new Date(item.created_at).toLocaleString()}</div>` : ''}
@@ -1869,7 +1908,7 @@ function displayAuditContent(items) {
                 <div id="result_${item.id}" style="margin-top: 8px;"></div>
             </div>
             <div style="margin-left: 15px;">
-                <button onclick="auditSingleItem('${item.id}')" class="btn btn-primary" style="padding: 5px 10px; font-size: 12px;">审核</button>
+                <button onclick="auditSingleItem('${item.id}')" class="btn btn-primary" style="padding: 5px 10px; font-size: 12px;">${getAuditButtonText(item.audit_status || item.status)}</button>
             </div>
         `;
 
@@ -1897,11 +1936,50 @@ function displayAuditContent(items) {
 function getStatusText(status) {
     const statusMap = {
         'pending': '待审核',
-        'approved': '审核通过',
-        'rejected': '审核失败',
-        'reviewing': '审核中'
+        'approved': '审核通过', 
+        'rejected': '审核不通过',
+        'reviewing': '审核中...'
     };
-    return statusMap[status] || '未知';
+    return statusMap[status] || '待审核';
+}
+
+// 获取审核按钮文本
+function getAuditButtonText(status) {
+    if (status === 'approved' || status === 'rejected') {
+        return '重新审核';
+    }
+    return '审核';
+}
+
+// 查看报告功能
+function viewReport(contentId) {
+    if (!contentId || contentId === 'unknown') {
+        showNotification('无效的内容ID', 'error');
+        return;
+    }
+    
+    // 获取并显示HTML格式的审核报告
+    fetch(`${API_BASE}/api/v1/moderation/content/${contentId}/audit`)
+        .then(response => {
+            if (!response.ok) {
+                throw new Error('获取报告失败');
+            }
+            return response.json();
+        })
+        .then(data => {
+            if (data.success && data.data && data.data.result) {
+                // 创建新窗口显示报告
+                const reportWindow = window.open('', '_blank', 'width=800,height=600,scrollbars=yes,resizable=yes');
+                reportWindow.document.write(data.data.result);
+                reportWindow.document.close();
+            } else {
+                showNotification('暂无审核报告', 'warning');
+            }
+        })
+        .catch(error => {
+            console.error('查看报告失败:', error);
+            showNotification('查看报告失败: ' + error.message, 'error');
+        });
 }
 
 // 更新审核分页
@@ -1942,28 +2020,7 @@ function auditNextPage() {
     }
 }
 
-// 全选/取消全选
-function toggleSelectAll() {
-    const selectAllCheckbox = document.getElementById('selectAllCheckbox');
-    const isChecked = selectAllCheckbox.checked;
-    
-    if (auditContentList && auditContentList.length > 0) {
-        auditContentList.forEach(item => {
-            const checkbox = document.getElementById(`audit_check_${item.id}`);
-            if (checkbox) {
-                checkbox.checked = isChecked;
-                const stringId = String(item.id);
-                if (isChecked) {
-                    auditSelectedContent.add(stringId);
-                } else {
-                    auditSelectedContent.delete(stringId);
-                }
-            }
-        });
-    }
-    
-    updateSelectedCount();
-}
+
 
 // 更新选中数量
 function updateSelectedCount() {

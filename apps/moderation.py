@@ -17,7 +17,7 @@ from datetime import datetime
 
 from services.moderation_service import ModerationService
 from models.models import ModerationRequest, BatchModerationRequest, ModerationResult
-from models.database import Audit, Contents, db
+from models.database import Contents, db
 from models.enums import ContentCategory, RiskLevel, AuditStatus
 from utils.logger import get_logger
 from services.wangyiyunsdk import (
@@ -54,29 +54,138 @@ class IDListModerationRequestAPI(BaseModel):
     id_list: List[int] = Field(..., description="内容ID列表", min_length=1, max_length=100)
 
 
-async def moderate_content_by_type(content_type: str, content_data: Any, callback_url: str = "") -> Dict[str, Any]:
-    """根据内容类型进行审核"""
+def moderate_content_by_type(content_type: str, content_data: Any) -> Dict[str, Any]:
+    """根据内容类型进行审核，等待审核结果完成后返回"""
+    import time
+    from models.enums import TaskType
+    
     try:
+        # 提交审核任务
         if content_type == "text":
-            result = check_text_service(content_data, callback_url)
-            return result if isinstance(result, dict) else {"result": result}
+            result = check_text_service(content_data, "")
         elif content_type == "images":
             if isinstance(content_data, str):
                 content_data = json.loads(content_data) if content_data else []
-            result = check_images_service(content_data, callback_url)
-            return result if isinstance(result, dict) else {"result": result}
+            result = check_images_service(content_data, "")
         elif content_type == "audios":
             if isinstance(content_data, str):
                 content_data = json.loads(content_data) if content_data else []
-            result = check_audios_service(content_data, callback_url)
-            return result if isinstance(result, dict) else {"result": result}
+            result = check_audios_service(content_data, "")
         elif content_type == "videos":
             if isinstance(content_data, str):
                 content_data = json.loads(content_data) if content_data else []
-            result = check_videos_service(content_data, callback_url)
-            return result if isinstance(result, dict) else {"result": result}
+            result = check_videos_service(content_data, "")
         else:
             return {"error": f"不支持的内容类型: {content_type}"}
+        
+        # 如果提交失败，直接返回错误
+        if not isinstance(result, (dict, list)):
+            return {"error": "提交审核任务失败"}
+        
+        # 处理不同类型的返回结果
+        if content_type == "text":
+            if not isinstance(result, dict):
+                return {"error": "文本审核返回格式错误"}
+            if "task_id" not in result or not result["task_id"]:
+                return {"error": result.get("msg", "提交文本审核失败")}
+            task_id = result["task_id"]
+            task_type = TaskType.TEXT.value
+        else:
+            # 对于images/audios/videos，返回的是列表
+            if not isinstance(result, list) or not result:
+                return {"error": "提交审核任务失败"}
+            # 取第一个任务的task_id
+            first_task = result[0]
+            if not isinstance(first_task, dict) or "task_id" not in first_task:
+                return {"error": "获取任务ID失败"}
+            task_id = first_task["task_id"]
+            if content_type == "images":
+                task_type = TaskType.IMAGE.value
+            elif content_type == "audios":
+                task_type = TaskType.AUDIO.value
+            elif content_type == "videos":
+                task_type = TaskType.VIDEO.value
+            
+            # 处理多个文件的情况
+            final_results = []
+            for item in result:
+                if "task_id" not in item or not item["task_id"]:
+                    final_results.append({
+                        "file_path": item.get("file_path", "unknown"),
+                        "error": item.get("msg", "提交审核失败"),
+                        "is_compliant": False
+                    })
+                    continue
+                
+                item_task_id = item["task_id"]
+                item_task_type = task_type  # 使用之前确定的task_type
+                
+                # 轮询查询审核结果
+                max_attempts = 30  # 最多查询30次
+                attempt = 0
+                query_result = None
+                
+                while attempt < max_attempts:
+                    try:
+                        query_result = query_task(item_task_id, item_task_type)
+                        if query_result is not None:  # 审核完成
+                            break
+                        time.sleep(2)  # 等待2秒后重试
+                        attempt += 1
+                    except Exception as e:
+                        service_logger.error(f"查询任务{task_id}失败: {e}")
+                        break
+                
+                if query_result is not None:
+                    final_results.append({
+                        "file_path": item.get("file_path", "unknown"),
+                        "task_id": task_id,
+                        "is_compliant": query_result.is_compliant,
+                        "result_text": query_result.result_text,
+                        "status": "completed"
+                    })
+                else:
+                    final_results.append({
+                        "file_path": item.get("file_path", "unknown"),
+                        "task_id": task_id,
+                        "error": "审核超时或失败",
+                        "is_compliant": False,
+                        "status": "timeout"
+                    })
+            
+            return {"results": final_results}
+        
+        # 对于文本类型，轮询查询审核结果
+        max_attempts = 30  # 最多查询30次
+        attempt = 0
+        query_result = None
+        
+        while attempt < max_attempts:
+            try:
+                query_result = query_task(task_id, task_type)
+                if query_result is not None:  # 审核完成
+                    break
+                time.sleep(2)  # 等待2秒后重试
+                attempt += 1
+            except Exception as e:
+                service_logger.error(f"查询任务{task_id}失败: {e}")
+                break
+        
+        if query_result is not None:
+            return {
+                "task_id": task_id,
+                "is_compliant": query_result.is_compliant,
+                "result_text": query_result.result_text,
+                "status": "completed"
+            }
+        else:
+            return {
+                "task_id": task_id,
+                "error": "审核超时或失败",
+                "is_compliant": False,
+                "status": "timeout"
+            }
+            
     except Exception as e:
         service_logger.error(f"审核{content_type}失败: {e}")
         return {"error": str(e)}
@@ -101,6 +210,8 @@ async def query_moderation_result(task_id: str, task_type: str) -> Dict[str, Any
 
 async def generate_audit_report(content_id: int, audit_results: Dict[str, Any]) -> str:
     """使用大模型生成HTML格式的审核报告"""
+    import json
+    import re
     try:
         # 获取内容信息
         content_obj = Contents.get_by_id(content_id)
@@ -158,6 +269,11 @@ async def generate_audit_report(content_id: int, audit_results: Dict[str, Any]) 
         .result-table {{ width: 100%; border-collapse: collapse; margin-bottom: 20px; }}
         .result-table th, .result-table td {{ border: 1px solid #ddd; padding: 12px; text-align: left; }}
         .result-table th {{ background-color: #f8f9fa; font-weight: bold; }}
+        .content-preview {{ max-width: 200px; max-height: 100px; overflow: hidden; }}
+        .content-preview img {{ max-width: 100%; max-height: 80px; object-fit: cover; border-radius: 4px; }}
+        .content-preview .text-content {{ font-size: 12px; color: #666; line-height: 1.4; }}
+        .content-preview .image-list {{ display: flex; flex-wrap: wrap; gap: 4px; }}
+        .content-preview .image-item {{ width: 40px; height: 40px; border-radius: 4px; overflow: hidden; }}
         .compliant {{ color: #28a745; font-weight: bold; }}
         .non-compliant {{ color: #dc3545; font-weight: bold; }}
         .conclusion {{ background-color: #e9ecef; padding: 20px; border-radius: 5px; margin-top: 20px; }}
@@ -182,6 +298,7 @@ async def generate_audit_report(content_id: int, audit_results: Dict[str, Any]) 
                 <thead>
                     <tr>
                         <th>审核维度</th>
+                        <th>审核内容</th>
                         <th>审核状态</th>
                         <th>合规性</th>
                         <th>详细信息</th>
@@ -189,6 +306,30 @@ async def generate_audit_report(content_id: int, audit_results: Dict[str, Any]) 
                 </thead>
                 <tbody>
 """
+        
+        # 生成不同维度的内容预览
+        def generate_dimension_content(dimension, content_obj):
+            if dimension == "images" and content_obj.images:
+                # 图片维度：解析JSON格式的图片列表
+                try:
+                    images_list = json.loads(content_obj.images) if isinstance(content_obj.images, str) else content_obj.images
+                    return images_list
+                except (json.JSONDecodeError, TypeError):
+                    return []
+            elif dimension == "content":
+                # 文本内容维度
+                if content_obj.content:
+                    text_preview = content_obj.content[:100] + '...' if len(content_obj.content) > 100 else content_obj.content
+                    return f'<div class="text-content">{text_preview}</div>'
+                elif content_obj.processing_html:
+                    text_content = re.sub(r'<[^>]+>', '', content_obj.processing_html)
+                    text_preview = text_content[:100] + '...' if len(text_content) > 100 else text_content
+                    return f'<div class="text-content">{text_preview}</div>'
+                else:
+                    return '<div class="text-content">无文本内容</div>'
+            else:
+                # 其他维度显示维度名称
+                return f'<div class="dimension-content">{dimension}</div>'
         
         # 添加各维度审核结果
         for dimension, result in audit_results.items():
@@ -198,9 +339,41 @@ async def generate_audit_report(content_id: int, audit_results: Dict[str, Any]) 
                 compliant_class = "compliant" if result.get("is_compliant", False) else "non-compliant"
                 detail = result.get("result_text", "无详细信息")
                 
-                html_report += f"""
+                # 特殊处理图片维度
+                if dimension == "images" and content_obj.images:
+                    # 解析JSON格式的图片列表
+                    try:
+                        images_list = json.loads(content_obj.images) if isinstance(content_obj.images, str) else content_obj.images
+                        # 为每张图片生成单独的行
+                        for i, img_url in enumerate(images_list):
+                            img_preview = f'<div class="image-item"><img src="{img_url}" alt="图片{i+1}" style="max-width: 150px; max-height: 100px; object-fit: cover;"></div>'
+                            html_report += f"""
                     <tr>
                         <td>{dimension}</td>
+                        <td>{img_preview}</td>
+                        <td>{status}</td>
+                        <td class="{compliant_class}">{compliant}</td>
+                        <td>{detail}</td>
+                    </tr>
+"""
+                    except (json.JSONDecodeError, TypeError):
+                        # 如果解析失败，显示错误信息
+                        html_report += f"""
+                    <tr>
+                        <td>{dimension}</td>
+                        <td>图片数据解析失败</td>
+                        <td>{status}</td>
+                        <td class="{compliant_class}">{compliant}</td>
+                        <td>{detail}</td>
+                    </tr>
+"""
+                else:
+                    # 其他维度的正常处理
+                    dimension_content = generate_dimension_content(dimension, content_obj)
+                    html_report += f"""
+                    <tr>
+                        <td>{dimension}</td>
+                        <td>{dimension_content}</td>
                         <td>{status}</td>
                         <td class="{compliant_class}">{compliant}</td>
                         <td>{detail}</td>
@@ -298,6 +471,7 @@ async def moderate_content_by_ids(request: Request, body: dict):
 
 async def process_single_content(content_id: int) -> Dict[str, Any]:
     """处理单个内容的审核"""
+    import json
     try:
         # 连接数据库
         db.connect(reuse_if_open=True)
@@ -314,40 +488,76 @@ async def process_single_content(content_id: int) -> Dict[str, Any]:
         
         # 并发审核四个维度
         audit_tasks = {}
-        callback_url = f"http://localhost:6188/api/callback/{content_id}"
         
         # 提交审核任务
         if content_obj.content:
-            audit_tasks["content"] = await moderate_content_by_type("text", content_obj.content, callback_url)
+            audit_tasks["content"] = moderate_content_by_type("text", content_obj.content)
         
         if content_obj.images:
-            audit_tasks["images"] = await moderate_content_by_type("images", content_obj.images, callback_url)
+            # 解析JSON格式的图片列表
+            try:
+                images_list = json.loads(content_obj.images) if isinstance(content_obj.images, str) else content_obj.images
+                audit_tasks["images"] = moderate_content_by_type("images", images_list)
+            except (json.JSONDecodeError, TypeError):
+                service_logger.error(f"解析图片列表失败: {content_obj.images}")
+                audit_tasks["images"] = {"error": "图片数据格式错误"}
         
         if content_obj.audios:
-            audit_tasks["audios"] = await moderate_content_by_type("audios", content_obj.audios, callback_url)
+            audit_tasks["audios"] = moderate_content_by_type("audios", content_obj.audios)
         
         if content_obj.videos:
-            audit_tasks["videos"] = await moderate_content_by_type("videos", content_obj.videos, callback_url)
+            audit_tasks["videos"] = moderate_content_by_type("videos", content_obj.videos)
         
-        # 等待所有任务完成并收集结果
+        # 处理审核结果
         audit_results = {}
         all_compliant = True
         
-        # 这里需要等待异步任务完成，实际应该通过回调或轮询机制
-        # 暂时模拟结果
-        for dimension, task in audit_tasks.items():
+        for dimension, task_result in audit_tasks.items():
             try:
-                # 模拟审核结果
-                audit_results[dimension] = {
-                    "status": "completed",
-                    "is_compliant": True,  # 这里应该是实际的审核结果
-                    "result_text": "内容合规"
-                }
+                if "error" in task_result:
+                    audit_results[dimension] = {
+                        "status": "error",
+                        "is_compliant": False,
+                        "result_text": task_result["error"]
+                    }
+                    all_compliant = False
+                elif dimension == "content":  # 文本类型
+                    audit_results[dimension] = {
+                        "status": task_result.get("status", "completed"),
+                        "is_compliant": task_result.get("is_compliant", False),
+                        "result_text": task_result.get("result_text", "未知结果")
+                    }
+                    if not task_result.get("is_compliant", False):
+                        all_compliant = False
+                else:  # 图片、音频、视频类型
+                    if "results" in task_result:
+                        # 处理多个文件的结果
+                        dimension_compliant = True
+                        result_texts = []
+                        for item in task_result["results"]:
+                            if not item.get("is_compliant", False):
+                                dimension_compliant = False
+                            result_texts.append(f"{item.get('file_path', 'unknown')}: {item.get('result_text', item.get('error', '未知结果'))}")
+                        
+                        audit_results[dimension] = {
+                            "status": "completed",
+                            "is_compliant": dimension_compliant,
+                            "result_text": "; ".join(result_texts)
+                        }
+                        if not dimension_compliant:
+                            all_compliant = False
+                    else:
+                        audit_results[dimension] = {
+                            "status": "error",
+                            "is_compliant": False,
+                            "result_text": "审核结果格式错误"
+                        }
+                        all_compliant = False
             except Exception as e:
                 audit_results[dimension] = {
                     "status": "error",
                     "is_compliant": False,
-                    "result_text": f"审核失败: {str(e)}"
+                    "result_text": f"处理审核结果失败: {str(e)}"
                 }
                 all_compliant = False
         
@@ -358,22 +568,18 @@ async def process_single_content(content_id: int) -> Dict[str, Any]:
         audit_results["overall_compliant"] = overall_compliant
         
         # 生成HTML报告
-        html_report = generate_audit_report(content_id, audit_results)
+        html_report = await generate_audit_report(content_id, audit_results)
         
-        # 保存审核记录
-        audit_record = Audit.create(
-            content=content_obj,
-            status=AuditStatus.APPROVED.value if overall_compliant else AuditStatus.REJECTED.value,
-            result=html_report
-        )
-        
-        # 更新内容审核状态
+        # 更新内容审核状态和保存结果到Contents表
         content_obj.audit_status = AuditStatus.APPROVED.value if overall_compliant else AuditStatus.REJECTED.value
+        content_obj.risk_level = "safe" if overall_compliant else "risky"
+        content_obj.processing_status = "completed"
+        content_obj.processing_content = json.dumps(audit_results, ensure_ascii=False)
+        content_obj.processing_html = html_report
         content_obj.save()
         
         return {
             "content_id": content_id,
-            "audit_id": audit_record.id,
             "final_decision": "APPROVED" if overall_compliant else "REJECTED",
             "is_compliant": overall_compliant,
             "audit_results": audit_results,
@@ -393,24 +599,29 @@ async def process_single_content(content_id: int) -> Dict[str, Any]:
             db.close()
 
 
-@router.get("/audit/{audit_id}", summary="获取审核报告")
-async def get_audit_report(audit_id: int):
-    """根据审核ID获取详细的审核报告"""
+@router.get("/content/{content_id}/audit", summary="获取内容审核报告")
+async def get_content_audit_report(content_id: int):
+    """根据内容ID获取详细的审核报告"""
     try:
         db.connect(reuse_if_open=True)
-        audit_record = Audit.get_by_id(audit_id)
+        content_obj = Contents.get_by_id(content_id)
+        processing_content = json.loads(content_obj.processing_content) if content_obj.processing_content else {}
         return {
             "success": True,
             "data": {
-                "id": audit_record.id,
-                "content_id": audit_record.content.id,
-                "status": audit_record.status,
-                "result": audit_record.result,  # HTML格式的报告
-                "created_at": str(audit_record.created_at)
+                "id": content_obj.id,
+                "content_id": content_obj.id,
+                "status": content_obj.audit_status,
+                "risk_level": content_obj.risk_level,
+                "processing_status": content_obj.processing_status,
+                "result": content_obj.processing_html,  # HTML格式的报告
+                "audit_results": processing_content,
+                "created_at": str(content_obj.created_at),
+                "updated_at": str(content_obj.updated_at)
             }
         }
     except DoesNotExist:
-        raise HTTPException(status_code=404, detail="审核记录未找到")
+        raise HTTPException(status_code=404, detail="内容记录未找到")
     except Exception as e:
         service_logger.error(f"获取审核报告失败: {e}")
         raise HTTPException(status_code=500, detail="获取审核报告失败")
@@ -419,22 +630,22 @@ async def get_audit_report(audit_id: int):
             db.close()
 
 
-@router.get("/audit/{audit_id}/download", summary="下载审核报告")
-async def download_audit_report(audit_id: int):
+@router.get("/content/{content_id}/audit/download", summary="下载内容审核报告")
+async def download_content_audit_report(content_id: int):
     """下载HTML格式的审核报告"""
     try:
         db.connect(reuse_if_open=True)
-        audit_record = Audit.get_by_id(audit_id)
+        content_obj = Contents.get_by_id(content_id)
         
         from fastapi.responses import HTMLResponse
         return HTMLResponse(
-            content=audit_record.result,
+            content=content_obj.processing_html or "<html><body><h1>暂无审核报告</h1></body></html>",
             headers={
-                "Content-Disposition": f"attachment; filename=audit_report_{audit_id}.html"
+                "Content-Disposition": f"attachment; filename=content_audit_report_{content_id}.html"
             }
         )
     except DoesNotExist:
-        raise HTTPException(status_code=404, detail="审核记录未找到")
+        raise HTTPException(status_code=404, detail="内容记录未找到")
     except Exception as e:
         service_logger.error(f"下载审核报告失败: {e}")
         raise HTTPException(status_code=500, detail="下载审核报告失败")
