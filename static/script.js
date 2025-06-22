@@ -1,5 +1,6 @@
 // 全局变量
-const API_BASE = 'http://localhost:6188';
+// 动态获取API基础URL，基于当前页面的协议、主机和端口
+const API_BASE = `${window.location.protocol}//${window.location.host}`;
 let currentPage = 1;
 let totalRecords = 0;
 let pageSize = 10;

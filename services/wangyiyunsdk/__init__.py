@@ -169,6 +169,7 @@ def query_task(task_id, task_type):
     result = api.query(params)
     if result and result.get("code") == 200:
         is_compliant = False
+        msg = "未知结果"  # 初始化msg变量，避免None值
         result_data = result.get("result", [])
         if not result_data:
             return None
@@ -183,12 +184,24 @@ def query_task(task_id, task_type):
         # 根据以下内容编写 elif分支 # 100：色情，110：性感低俗，200：广告，210：二维码，260：广告法，300：暴恐，400：违禁，500：涉政，800：恶心类，900：其他，1100：涉价值观
         elif label_dict.get(110):
             msg = f"""涉嫌<font color="red">性感低俗</font>，置信度：<font color="red">{label_dict[110]}</font>"""
+        elif label_dict.get(200):
+            msg = f"""涉嫌<font color="red">广告</font>，置信度：<font color="red">{label_dict[200]}</font>"""
+        elif label_dict.get(210):
+            msg = f"""涉嫌<font color="red">二维码</font>，置信度：<font color="red">{label_dict[210]}</font>"""
+        elif label_dict.get(260):
+            msg = f"""涉嫌<font color="red">广告法</font>，置信度：<font color="red">{label_dict[260]}</font>"""
         elif label_dict.get(300):
             msg = f"""涉嫌<font color="red">暴恐</font>，置信度：<font color="red">{label_dict[300]}</font>"""
         elif label_dict.get(400):
             msg = f"""涉嫌<font color="red">违禁</font>，置信度：<font color="red">{label_dict[400]}</font>"""
+        elif label_dict.get(500):
+            msg = f"""涉嫌<font color="red">涉政</font>，置信度：<font color="red">{label_dict[500]}</font>"""
         elif label_dict.get(800):
             msg = f"""涉嫌<font color="red">恶心</font>，置信度：<font color="red">{label_dict[800]}</font>"""
+        elif label_dict.get(900):
+            msg = f"""涉嫌<font color="red">其他</font>，置信度：<font color="red">{label_dict[900]}</font>"""
+        elif label_dict.get(1100):
+            msg = f"""涉嫌<font color="red">涉价值观</font>，置信度：<font color="red">{label_dict[1100]}</font>"""
         else:
             msg = f"""合规"""
             is_compliant = True

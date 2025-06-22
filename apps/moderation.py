@@ -229,7 +229,7 @@ async def generate_audit_report(content_id: int, audit_results: Dict[str, Any]) 
 请根据以下审核结果生成一份详细的HTML格式审核报告：
 
 内容ID: {content_id}
-标题: {content_obj.title or '无标题'}
+标题: {content_obj.title if content_obj.title is not None else '无标题'}
 审核时间: {summary_data['timestamp']}
 
 审核结果详情:
@@ -287,7 +287,7 @@ async def generate_audit_report(content_id: int, audit_results: Dict[str, Any]) 
             <div class="title">内容审核报告</div>
             <div class="info">
                 <p><strong>内容ID:</strong> {content_id}</p>
-                <p><strong>标题:</strong> {content_obj.title or '无标题'}</p>
+                <p><strong>标题:</strong> {content_obj.title if content_obj.title is not None else '无标题'}</p>
                 <p><strong>审核时间:</strong> {summary_data['timestamp']}</p>
             </div>
         </div>
@@ -337,7 +337,10 @@ async def generate_audit_report(content_id: int, audit_results: Dict[str, Any]) 
                 status = "已完成" if result.get("status") == "completed" else "处理中"
                 compliant = "合规" if result.get("is_compliant", False) else "不合规"
                 compliant_class = "compliant" if result.get("is_compliant", False) else "non-compliant"
-                detail = result.get("result_text", "无详细信息")
+                # 确保detail不为None，避免字符串拼接错误
+                detail = result.get("result_text") or "无详细信息"
+                if detail is None:
+                    detail = "无详细信息"
                 
                 # 特殊处理图片维度
                 if dimension == "images" and content_obj.images:
@@ -537,7 +540,12 @@ async def process_single_content(content_id: int) -> Dict[str, Any]:
                         for item in task_result["results"]:
                             if not item.get("is_compliant", False):
                                 dimension_compliant = False
-                            result_texts.append(f"{item.get('file_path', 'unknown')}: {item.get('result_text', item.get('error', '未知结果'))}")
+                            # 确保所有字段都不为None，避免字符串拼接错误
+                            file_path = item.get('file_path') or 'unknown'
+                            result_text = item.get('result_text') or item.get('error') or '未知结果'
+                            if result_text is None:
+                                result_text = '未知结果'
+                            result_texts.append(f"{file_path}: {result_text}")
                         
                         audit_results[dimension] = {
                             "status": "completed",
