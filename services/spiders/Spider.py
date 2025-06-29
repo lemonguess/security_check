@@ -201,7 +201,17 @@ class SpiderBase(ABC):
                 title = item.get('title', '')
                 url = item.get('url', '')
                 html_content = item.get('content', '')  # 原始HTML内容
-                content_type = item.get('types', ColumnType.CurrentPoliticalNews.value)
+                
+                # 栏目类型映射：将中文名称映射到枚举值
+                type_mapping = {
+                    '时政要闻': ColumnType.CurrentPoliticalNews.value,
+                    '行业热点': ColumnType.IndustryFocus.value,
+                    '川烟动态': ColumnType.CompanyDynamic.value,
+                    '媒体报道': ColumnType.MediaReport.value
+                }
+                raw_type = item.get('types', '')
+                content_type = type_mapping.get(raw_type, ColumnType.CurrentPoliticalNews.value)
+                
                 publish_time = item.get('publish_time', '')
                 images = item.get('images', [])
                 audios = item.get('audios', [])

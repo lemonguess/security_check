@@ -411,7 +411,7 @@ async def generate_audit_report(content_id: int, audit_results: Dict[str, Any]) 
 
 
 @router.post("/", summary="内容审核 - 支持ID列表并发审核")
-async def moderate_content_by_ids(request: Request, body: dict):
+async def moderate_content_by_ids(request: Request, body: dict, background_tasks: BackgroundTasks):
     """内容审核 - 支持单条、批量和ID列表审核"""
     try:
         service = request.app.state.service
@@ -430,41 +430,26 @@ async def moderate_content_by_ids(request: Request, body: dict):
 
         logger.info(f"准备审核内容, IDs: {id_list}")
         
-        # 并发处理所有ID
+        # 异步任务入队，立即返回任务ID和初始状态
         results = []
-        
-        # 使用asyncio.gather并发处理异步任务
-        tasks = []
         for content_id in id_list:
-            tasks.append(process_single_content(int(content_id)))
-        
-        # 等待所有任务完成
-        try:
-            results = await asyncio.gather(*tasks, return_exceptions=True)
-            
-            # 处理异常结果
-            processed_results = []
-            for i, result in enumerate(results):
-                if isinstance(result, Exception):
-                    logger.error(f"审核内容 {id_list[i]} 失败: {result}")
-                    processed_results.append({
-                        "content_id": id_list[i],
-                        "error": str(result),
-                        "final_decision": "ERROR",
-                        "is_compliant": False
-                    })
-                else:
-                    processed_results.append(result)
-            
-            results = processed_results
-        except Exception as e:
-            logger.error(f"批量审核失败: {e}")
-            raise HTTPException(status_code=500, detail=f"批量审核失败: {str(e)}")
-        
+            # 标记内容为 processing 状态
+            db.connect(reuse_if_open=True)
+            content_obj = Contents.get_or_none(Contents.id == int(content_id))
+            if content_obj:
+                content_obj.processing_status = "processing"
+                content_obj.audit_status = AuditStatus.REVIEWING.value
+                content_obj.save()
+            # 使用BackgroundTasks启动后台任务
+            background_tasks.add_task(process_single_content, int(content_id))
+            results.append({
+                "content_id": content_id,
+                "status": "processing"
+            })
         return {
             "success": True,
             "data": results,
-            "message": "审核任务已完成"
+            "message": "审核任务已提交，正在处理中，请稍后通过内容ID查询状态"
         }
             
     except Exception as e:
@@ -579,11 +564,13 @@ async def process_single_content(content_id: int) -> Dict[str, Any]:
         html_report = await generate_audit_report(content_id, audit_results)
         
         # 更新内容审核状态和保存结果到Contents表
+        final_decision = "APPROVED" if overall_compliant else "REJECTED"
         content_obj.audit_status = AuditStatus.APPROVED.value if overall_compliant else AuditStatus.REJECTED.value
         content_obj.risk_level = "safe" if overall_compliant else "risky"
         content_obj.processing_status = "completed"
         content_obj.processing_content = json.dumps(audit_results, ensure_ascii=False)
         content_obj.processing_html = html_report
+        content_obj.final_decision = final_decision
         content_obj.save()
         
         return {

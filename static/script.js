@@ -5,7 +5,6 @@ let currentPage = 1;
 let totalRecords = 0;
 let pageSize = 10;
 let selectedContent = new Set();
-
 // 审核相关全局变量
 let auditCurrentPage = 1;
 let auditTotalRecords = 0;
@@ -16,9 +15,8 @@ let auditCurrentColumnType = '';
 
 // 抓取相关全局变量
 let selectedColumnType = '';
-let selectedAuditColumnType = '';
+let selectedAuditColumnType = ''
 let isScrapingInProgress = false;
-
 // 页面加载完成后执行
 window.onload = function() {
     console.log('页面加载完成');
@@ -26,7 +24,6 @@ window.onload = function() {
     switchTab('scraping'); // 默认显示抓取测试页面
     initializeScrapeModal();
 };
-
 // 初始化抓取进度弹窗
 function initializeScrapeModal() {
     const modalHtml = `
@@ -710,6 +707,25 @@ function displayContentList(contentList) {
     listElement.innerHTML = '';
     
     contentList.forEach((item, index) => {
+        // 构建mediaFiles对象，避免URL编码问题
+        if (!item.mediaFiles && (item.images || item.videos || item.audios)) {
+            item.mediaFiles = {
+                images: (item.images || []).map((url, idx) => ({
+                    id: `img_${item.id}_${idx}`,
+                    url: url,
+                    type: 'image',
+                    size: '未知大小'
+                })),
+                videos: (item.videos || []).map((url, idx) => ({
+                    id: `vid_${item.id}_${idx}`,
+                    url: url,
+                    type: 'video',
+                    duration: '未知时长',
+                    size: '未知大小'
+                }))
+            };
+        }
+        
         const itemDiv = document.createElement('div');
         itemDiv.className = 'content-item';
         itemDiv.style.cssText = 'padding: 15px; border-bottom: 1px solid #eee; display: flex; align-items: center;';
@@ -1361,6 +1377,25 @@ function displayAuditContentList(items = null) {
     }
     
     contentItems.forEach((item, index) => {
+        // 构建mediaFiles对象，避免URL编码问题
+        if (!item.mediaFiles && (item.images || item.videos || item.audios)) {
+            item.mediaFiles = {
+                images: (item.images || []).map((url, idx) => ({
+                    id: `img_${item.id}_${idx}`,
+                    url: url,
+                    type: 'image',
+                    size: '未知大小'
+                })),
+                videos: (item.videos || []).map((url, idx) => ({
+                    id: `vid_${item.id}_${idx}`,
+                    url: url,
+                    type: 'video',
+                    duration: '未知时长',
+                    size: '未知大小'
+                }))
+            };
+        }
+        
         const itemDiv = document.createElement('div');
         itemDiv.className = 'content-item';
         itemDiv.id = `content-item-${item.id}`;
@@ -1384,7 +1419,8 @@ function displayAuditContentList(items = null) {
                     <span id="status_${item.id}" class="status ${getStatusClass(item.audit_status || item.status || 'pending')}">${getStatusText(item.audit_status || item.status || 'pending')}</span>
                     ${titleLink}
                 </div>
-                ${item.created_at || item.publish_date || item.publishDate ? `<div style="font-size: 12px; color: #999; margin-bottom: 5px;">📅 ${item.created_at ? new Date(item.created_at).toLocaleString() : (item.publish_date || item.publishDate)}</div>` : ''}
+                ${item.publish_time ? `<div style="font-size: 12px; color: #999; margin-bottom: 5px;">🕒 发布时间: ${new Date(item.publish_time).toLocaleString()}</div>` : ''}
+                ${item.created_at ? `<div style="font-size: 12px; color: #999; margin-bottom: 5px;">📅 创建时间: ${new Date(item.created_at).toLocaleString()}</div>` : ''}
                 ${item.content ? `<div style="font-size: 12px; color: #666; margin-bottom: 5px;">📝 ${item.content.substring(0, 100)}${item.content.length > 100 ? '...' : ''}</div>` : ''}
                 ${generateMediaInfoHtml(item)}
                 <div id="audit_result_${item.id}" class="audit-details-container" style="margin-top: 8px;"></div>
@@ -1758,16 +1794,17 @@ function exportResults() {
 
 // 生成CSV数据
 function generateCSVData(items) {
-    const headers = ['标题', '栏目类型', '发布时间', '作者', '审核结果', '置信度', '链接'];
+    const headers = ['标题', '栏目类型', '发布时间', '创建时间', '作者', '审核结果', '置信度', '链接'];
     const rows = items.map(item => {
         const result = item.auditResult;
         return [
             `"${item.title}"`,
-            item.type,
-            item.publishDate || '',
+            item.column_type || item.type || '',
+            item.publish_time ? new Date(item.publish_time).toLocaleString() : '',
+            item.created_at ? new Date(item.created_at).toLocaleString() : '',
             item.author || '',
-            result.final_decision || '',
-            result.confidence_score ? (result.confidence_score * 100).toFixed(1) + '%' : '',
+            result ? (result.final_decision || '') : '',
+            result && result.confidence_score ? (result.confidence_score * 100).toFixed(1) + '%' : '',
             item.url || ''
         ];
     });
@@ -1884,6 +1921,25 @@ function displayAuditContent(items) {
     contentList.innerHTML = '';
     
     items.forEach((item, index) => {
+        // 构建mediaFiles对象，避免URL编码问题
+        if (!item.mediaFiles && (item.images || item.videos || item.audios)) {
+            item.mediaFiles = {
+                images: (item.images || []).map((url, idx) => ({
+                    id: `img_${item.id}_${idx}`,
+                    url: url,
+                    type: 'image',
+                    size: '未知大小'
+                })),
+                videos: (item.videos || []).map((url, idx) => ({
+                    id: `vid_${item.id}_${idx}`,
+                    url: url,
+                    type: 'video',
+                    duration: '未知时长',
+                    size: '未知大小'
+                }))
+            };
+        }
+        
         const itemDiv = document.createElement('div');
         itemDiv.className = 'content-item';
         itemDiv.style.cssText = 'padding: 15px; border-bottom: 1px solid #eee; display: flex; align-items: center;';
@@ -1904,7 +1960,8 @@ function displayAuditContent(items) {
                     <span id="status_${item.id}" class="status ${getStatusClass(item.audit_status || item.status || 'pending')}">${getStatusText(item.audit_status || item.status || 'pending')}</span>
                     ${titleLink}
                 </div>
-                ${item.created_at ? `<div style="font-size: 12px; color: #999; margin-bottom: 5px;">📅 ${new Date(item.created_at).toLocaleString()}</div>` : ''}
+                ${item.publish_time ? `<div style="font-size: 12px; color: #999; margin-bottom: 5px;">🕒 发布时间: ${new Date(item.publish_time).toLocaleString()}</div>` : ''}
+                ${item.created_at ? `<div style="font-size: 12px; color: #999; margin-bottom: 5px;">📅 创建时间: ${new Date(item.created_at).toLocaleString()}</div>` : ''}
                 ${item.content ? `<div style="font-size: 12px; color: #666; margin-bottom: 5px;">📝 ${item.content.substring(0, 100)}${item.content.length > 100 ? '...' : ''}</div>` : ''}
                 ${generateMediaInfoHtml(item)}
                 <div id="result_${item.id}" style="margin-top: 8px;"></div>

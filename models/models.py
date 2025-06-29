@@ -131,7 +131,7 @@ class ModerationResult(BaseModel):
     fusion_result: Optional[FusionResult] = Field(None, description="融合结果")
 
     # 最终结果
-    final_decision: RiskLevel = Field(..., description="最终决策")
+    final_decision: Optional[str] = Field(default="N/A", description="最终决策", max_length=50)
     final_score: float = Field(..., ge=0.0, le=1.0, description="最终分数")
     masked_content: Optional[str] = Field(None, description="脱敏后内容")
 

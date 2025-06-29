@@ -73,7 +73,7 @@ async def get_content_list(
         # 查询数据库
         query = Contents.select().where(
             Contents.column_type == column_type
-        ).order_by(Contents.created_at.desc())
+        ).order_by(Contents.publish_time.desc())
         
         total_count = query.count()
         contents = query.offset(offset).limit(page_size)

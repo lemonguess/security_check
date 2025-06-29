@@ -194,14 +194,14 @@ def query_task(task_id, task_type):
             msg = f"""涉嫌<font color="red">暴恐</font>，置信度：<font color="red">{label_dict[300]}</font>"""
         elif label_dict.get(400):
             msg = f"""涉嫌<font color="red">违禁</font>，置信度：<font color="red">{label_dict[400]}</font>"""
-        elif label_dict.get(500):
-            msg = f"""涉嫌<font color="red">涉政</font>，置信度：<font color="red">{label_dict[500]}</font>"""
+        # elif label_dict.get(500):
+        #     msg = f"""涉嫌<font color="red">涉政</font>，置信度：<font color="red">{label_dict[500]}</font>"""
         elif label_dict.get(800):
             msg = f"""涉嫌<font color="red">恶心</font>，置信度：<font color="red">{label_dict[800]}</font>"""
-        elif label_dict.get(900):
-            msg = f"""涉嫌<font color="red">其他</font>，置信度：<font color="red">{label_dict[900]}</font>"""
-        elif label_dict.get(1100):
-            msg = f"""涉嫌<font color="red">涉价值观</font>，置信度：<font color="red">{label_dict[1100]}</font>"""
+        # elif label_dict.get(900):
+        #     msg = f"""涉嫌<font color="red">其他</font>，置信度：<font color="red">{label_dict[900]}</font>"""
+        # elif label_dict.get(1100):
+        #     msg = f"""涉嫌<font color="red">涉价值观</font>，置信度：<font color="red">{label_dict[1100]}</font>"""
         else:
             msg = f"""合规"""
             is_compliant = True
