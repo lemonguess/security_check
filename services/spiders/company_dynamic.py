@@ -18,7 +18,7 @@ class DynamicSpider(SpiderBase):
     """
     川烟动态爬虫
     """
-    def __init__(self, name: str = "川烟动态爬虫", url: str = "http://sc.tobacco.gov.cn/province_api/system/sysArticle/active_list?typeCode=chuanyandongtai&pageNo=2&pageSize=500"):
+    def __init__(self, name: str = "川烟动态爬虫", url: str = "http://sc.tobacco.gov.cn/province_api/system/sysArticle/active_list?typeCode=chuanyandongtai&pageNo=1&pageSize=500"):
         super().__init__(name)
         self.name = name
         self.logger = get_logger(self.name)
