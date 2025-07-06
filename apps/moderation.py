@@ -13,13 +13,69 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from pydantic import BaseModel, Field
 from peewee import DoesNotExist
 import uuid
-from datetime import datetime
+from datetime import datetime, date
+import io
 
 from services.moderation_service import ModerationService
 from models.models import ModerationRequest, BatchModerationRequest, ModerationResult
-from models.database import Contents, db
-from models.enums import ContentCategory, RiskLevel, AuditStatus
+from models.database import Contents, AuditStats, db
+from models.enums import ContentCategory, RiskLevel, AuditStatus, EngineType, ProcessingStatus
+from utils.exceptions import ModerationError
 from utils.logger import get_logger
+
+# 全局任务状态存储
+task_status_store = {}
+
+async def process_audit_task(task_id: str, content_id: int, service, logger):
+    """异步处理审核任务"""
+    try:
+        # 更新任务状态为处理中
+        task_status_store[task_id] = {
+            "status": "processing",
+            "content_id": content_id,
+            "message": "正在审核中...",
+            "created_at": datetime.now().isoformat()
+        }
+        
+        # 执行审核
+        result = await service.moderate(content_id=content_id)
+        
+        # 更新任务状态为完成
+        task_status_store[task_id] = {
+            "status": "completed",
+            "content_id": content_id,
+            "result": result,
+            "message": "审核完成",
+            "created_at": task_status_store[task_id]["created_at"],
+            "completed_at": datetime.now().isoformat()
+        }
+        
+        logger.info(f"审核任务完成: {task_id}, content_id: {content_id}")
+        
+    except Exception as e:
+        # 更新任务状态为失败
+        task_status_store[task_id] = {
+            "status": "failed",
+            "content_id": content_id,
+            "error": str(e),
+            "message": f"审核失败: {str(e)}",
+            "created_at": task_status_store.get(task_id, {}).get("created_at", datetime.now().isoformat()),
+            "failed_at": datetime.now().isoformat()
+        }
+        
+        # 更新数据库状态为待审核
+        try:
+            with db.atomic():
+                content_obj = Contents.get_or_none(Contents.id == content_id)
+                if content_obj:
+                    content_obj.audit_status = AuditStatus.PENDING.value
+                    content_obj.save()
+        except Exception as db_error:
+            logger.error(f"更新数据库状态失败: {db_error}")
+        
+        logger.error(f"审核任务失败: {task_id}, content_id: {content_id}, error: {str(e)}")
+
+# 任务状态查询接口将在router定义后添加
 from services.wangyiyunsdk import (
     check_text_service, check_images_service, check_audios_service, 
     check_videos_service, query_task
@@ -29,6 +85,40 @@ from services.agents import create_moderation_agent
 service_logger = get_logger(__name__)
 
 router = APIRouter(tags=["内容审核"])
+
+
+def update_audit_stats(success: bool, processing_time: float = 0.0):
+    """更新审核统计数据"""
+    try:
+        today = date.today()
+        db.connect(reuse_if_open=True)
+        
+        # 获取或创建今日统计记录
+        stats, created = AuditStats.get_or_create(
+            date=today,
+            defaults={
+                'total_audits': 0,
+                'successful_audits': 0,
+                'failed_audits': 0,
+                'total_processing_time': 0.0
+            }
+        )
+        
+        # 更新统计数据
+        stats.total_audits += 1
+        if success:
+            stats.successful_audits += 1
+        else:
+            stats.failed_audits += 1
+        stats.total_processing_time += processing_time
+        stats.updated_at = datetime.now()
+        stats.save()
+        
+    except Exception as e:
+        service_logger.error(f"更新审核统计失败: {e}")
+    finally:
+        if not db.is_closed():
+            db.close()
 
 
 class ModerationRequestAPI(BaseModel):
@@ -460,6 +550,8 @@ async def moderate_content_by_ids(request: Request, body: dict, background_tasks
 async def process_single_content(content_id: int) -> Dict[str, Any]:
     """处理单个内容的审核"""
     import json
+    import time
+    start_time = time.time()
     try:
         # 连接数据库
         db.connect(reuse_if_open=True)
@@ -573,6 +665,10 @@ async def process_single_content(content_id: int) -> Dict[str, Any]:
         content_obj.final_decision = final_decision
         content_obj.save()
         
+        # 更新审核统计
+        processing_time = time.time() - start_time
+        update_audit_stats(success=overall_compliant, processing_time=processing_time)
+        
         return {
             "content_id": content_id,
             "final_decision": "APPROVED" if overall_compliant else "REJECTED",
@@ -626,19 +722,45 @@ async def get_content_audit_report(content_id: int):
 
 
 @router.get("/content/{content_id}/audit/download", summary="下载内容审核报告")
-async def download_content_audit_report(content_id: int):
-    """下载HTML格式的审核报告"""
+async def download_content_audit_report(content_id: int, format: str = "html"):
+    """下载审核报告 - 支持HTML和PDF格式"""
     try:
         db.connect(reuse_if_open=True)
         content_obj = Contents.get_by_id(content_id)
         
-        from fastapi.responses import HTMLResponse
-        return HTMLResponse(
-            content=content_obj.processing_html or "<html><body><h1>暂无审核报告</h1></body></html>",
-            headers={
-                "Content-Disposition": f"attachment; filename=content_audit_report_{content_id}.html"
-            }
-        )
+        html_content = content_obj.processing_html or "<html><body><h1>暂无审核报告</h1></body></html>"
+        
+        if format.lower() == "pdf":
+             try:
+                 import weasyprint
+                 from fastapi.responses import Response
+                 
+                 # 生成PDF
+                 pdf_buffer = io.BytesIO()
+                 weasyprint.HTML(string=html_content).write_pdf(pdf_buffer)
+                 pdf_buffer.seek(0)
+                 
+                 return Response(
+                     content=pdf_buffer.getvalue(),
+                     media_type="application/pdf",
+                     headers={
+                         "Content-Disposition": f"attachment; filename=content_audit_report_{content_id}.pdf"
+                     }
+                 )
+             except ImportError:
+                 raise HTTPException(status_code=500, detail="PDF生成功能不可用，请联系管理员")
+             except Exception as e:
+                 service_logger.error(f"PDF生成失败: {e}")
+                 raise HTTPException(status_code=500, detail="PDF生成失败")
+        else:
+            # 默认返回HTML格式
+            from fastapi.responses import HTMLResponse
+            return HTMLResponse(
+                content=html_content,
+                headers={
+                    "Content-Disposition": f"attachment; filename=content_audit_report_{content_id}.html"
+                }
+            )
     except DoesNotExist:
         raise HTTPException(status_code=404, detail="内容记录未找到")
     except Exception as e:
@@ -651,28 +773,45 @@ async def download_content_audit_report(content_id: int):
 
 @router.post("/single", summary="单条内容审核")
 async def moderate_single(request: Request, moderation_request: ModerationRequestAPI):
-    """审核单条内容"""
+    """审核单条内容 - 异步处理"""
+    import asyncio
+    import uuid
+    from models.enums import AuditStatus
+    
     try:
         service = request.app.state.service
         logger = request.app.state.logger
         
         logger.info(f"收到单条审核请求: {moderation_request.content_id}")
         
-        # 执行审核
-        result = await service.moderate(
-            content=moderation_request.content,
-            content_id=moderation_request.content_id,
-            content_type=moderation_request.content_type,
-            priority=moderation_request.priority,
-            timeout=moderation_request.timeout
-        )
+        # 验证参数
+        if not moderation_request.content_id:
+            raise ValueError("content_id 不能为空")
+        
+        content_id = int(moderation_request.content_id)
+        
+        # 更新状态为审核中
+        from models.database import Contents, db
+        with db.atomic():
+            content_obj = Contents.get_or_none(Contents.id == content_id)
+            if not content_obj:
+                raise ValueError(f"内容不存在: {content_id}")
+            
+            content_obj.audit_status = AuditStatus.REVIEWING.value
+            content_obj.save()
+        
+        # 生成任务ID
+        task_id = str(uuid.uuid4())
+        
+        # 异步执行审核任务
+        asyncio.create_task(process_audit_task(task_id, content_id, service, logger))
         
         return {
-            "success": True,
-            "data": result,
-            "message": "审核完成"
-        }
-        
+             "task_id": task_id,
+             "content_id": content_id,
+             "status": "reviewing",
+             "message": "审核任务已提交，正在处理中"
+         }
     except Exception as e:
         service_logger.error(f"单条审核失败: {e}")
         raise HTTPException(status_code=500, detail=f"审核失败: {str(e)}")
@@ -724,6 +863,44 @@ async def get_content_categories():
     }
 
 
+@router.get("/task/{task_id}", summary="查询审核任务状态")
+async def get_task_status(task_id: str):
+    """查询审核任务状态"""
+    if task_id not in task_status_store:
+        raise HTTPException(status_code=404, detail="任务不存在")
+    
+    return task_status_store[task_id]
+
+
+@router.get("/content/{content_id}/status", summary="查询内容审核状态")
+async def get_content_status(content_id: int):
+    """查询内容审核状态"""
+    try:
+        from models.database import Contents
+        content_obj = Contents.get_or_none(Contents.id == content_id)
+        
+        if not content_obj:
+            raise HTTPException(status_code=404, detail="内容不存在")
+        
+        # 处理updated_at字段的类型转换
+        updated_at_str = None
+        if content_obj.updated_at:
+            if hasattr(content_obj.updated_at, 'isoformat'):
+                updated_at_str = content_obj.updated_at.isoformat()
+            else:
+                updated_at_str = str(content_obj.updated_at)
+        
+        return {
+            "content_id": content_id,
+            "audit_status": content_obj.audit_status,
+            "processing_status": content_obj.processing_status,
+            "risk_level": content_obj.risk_level,
+            "updated_at": updated_at_str
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"查询失败: {str(e)}")
+
+
 @router.get("/risk-levels", summary="获取风险等级")
 async def get_risk_levels():
     """获取风险等级列表"""
@@ -739,3 +916,60 @@ async def get_risk_levels():
         "risk_levels": levels,
         "message": "风险等级列表获取成功"
     }
+
+
+@router.get("/stats", summary="获取审核统计数据")
+async def get_audit_stats():
+    """获取审核统计数据"""
+    try:
+        db.connect(reuse_if_open=True)
+        today = date.today()
+        
+        # 获取总审核量（所有历史数据）
+        total_audits = AuditStats.select(AuditStats.total_audits).scalar() or 0
+        if total_audits == 0:
+            # 如果统计表为空，从Contents表计算
+            total_audits = Contents.select().where(
+                (Contents.audit_status == AuditStatus.APPROVED.value) |
+                (Contents.audit_status == AuditStatus.REJECTED.value)
+            ).count()
+        else:
+            # 计算所有日期的总审核量
+            total_audits = sum([stats.total_audits for stats in AuditStats.select()])
+        
+        # 获取成功审核量
+        successful_audits = sum([stats.successful_audits for stats in AuditStats.select()]) or 0
+        if successful_audits == 0:
+            # 从Contents表计算
+            successful_audits = Contents.select().where(
+                Contents.audit_status == AuditStatus.APPROVED.value
+            ).count()
+        
+        # 计算成功率
+        success_rate = (successful_audits / total_audits * 100) if total_audits > 0 else 0.0
+        
+        # 计算平均处理时间
+        total_processing_time = sum([stats.total_processing_time for stats in AuditStats.select()]) or 0.0
+        avg_processing_time = (total_processing_time / total_audits) if total_audits > 0 else 0.0
+        
+        # 获取今日审核量
+        today_stats = AuditStats.get_or_none(AuditStats.date == today)
+        today_audits = today_stats.total_audits if today_stats else 0
+        
+        return {
+            "success": True,
+            "data": {
+                "total_audits": total_audits,
+                "success_rate": round(success_rate, 1),
+                "avg_processing_time": round(avg_processing_time, 2),
+                "today_audits": today_audits
+            },
+            "message": "统计数据获取成功"
+        }
+        
+    except Exception as e:
+        service_logger.error(f"获取审核统计失败: {e}")
+        raise HTTPException(status_code=500, detail="获取统计数据失败")
+    finally:
+        if not db.is_closed():
+            db.close()

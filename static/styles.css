@@ -469,25 +469,7 @@ body {
     color: #000;
 }
 
-.media-grid {
-    display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
-    gap: 15px;
-    margin-top: 20px;
-}
 
-.media-item {
-    border: 1px solid #ddd;
-    border-radius: 8px;
-    padding: 10px;
-    text-align: center;
-}
-
-.media-item img {
-    max-width: 100%;
-    height: auto;
-    border-radius: 5px;
-}
 
 /* 栏目类型选择样式 */
 .column-type-selection {

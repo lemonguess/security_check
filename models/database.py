@@ -80,16 +80,31 @@ class Contents(Model):
             (('title', 'url'), True),  # 联合唯一键
         )
 
+# 审核统计表
+class AuditStats(Model):
+    id = AutoField()
+    date = DateField(unique=True, help_text="统计日期")
+    total_audits = IntegerField(default=0, help_text="总审核量")
+    successful_audits = IntegerField(default=0, help_text="成功审核量")
+    failed_audits = IntegerField(default=0, help_text="失败审核量")
+    total_processing_time = FloatField(default=0.0, help_text="总处理时间")
+    created_at = CustomDateTimeField(default=datetime.now, help_text="创建时间")
+    updated_at = CustomDateTimeField(default=datetime.now, help_text="更新时间")
+    
+    class Meta:
+        database = db
+
 # Audit表已删除，相关功能迁移到Contents表中
 
 # 创建表
 def create_tables():
     # 强制创建表，包含所有字段
     with db:
-        db.create_tables([Task, Contents], safe=True)
+        db.create_tables([Task, Contents, AuditStats], safe=True)
     # print("数据库表创建成功！")
     # print("- Task 表")
     # print("- Contents 表 (包含 images, audios, videos 字段)")
+    # print("- AuditStats 表 (审核统计表)")
 
 if __name__ == "__main__":
     create_tables()

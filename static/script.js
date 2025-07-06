@@ -537,55 +537,7 @@ function extractMediaFromContent(content) {
     return { images, videos };
 }
 
-// 审核媒体文件
-async function moderateMediaFiles(mediaFiles) {
-    const results = {
-        images: [],
-        videos: []
-    };
-    
-    // 审核图片
-    for (const image of mediaFiles.images) {
-        const result = await moderateImages([image]);
-        results.images.push({
-            ...image,
-            moderation_result: result[0]
-        });
-    }
-    
-    // 审核视频
-    for (const video of mediaFiles.videos) {
-        const result = await moderateVideos([video]);
-        results.videos.push({
-            ...video,
-            moderation_result: result[0]
-        });
-    }
-    
-    return results;
-}
 
-// 审核图片
-async function moderateImages(images) {
-    // 模拟图片审核
-    return images.map(image => ({
-        risk_level: ['SAFE', 'SUSPICIOUS', 'RISKY'][Math.floor(Math.random() * 3)],
-        confidence: Math.random(),
-        categories: ['正常内容', '可疑内容'][Math.floor(Math.random() * 2)],
-        processing_time: Math.random() * 2 + 0.5
-    }));
-}
-
-// 审核视频
-async function moderateVideos(videos) {
-    // 模拟视频审核
-    return videos.map(video => ({
-        risk_level: ['SAFE', 'SUSPICIOUS', 'RISKY'][Math.floor(Math.random() * 3)],
-        confidence: Math.random(),
-        categories: ['正常内容', '可疑内容'][Math.floor(Math.random() * 2)],
-        processing_time: Math.random() * 5 + 1
-    }));
-}
 
 // 按栏目类型抓取内容
 async function scrapeByColumnType() {
@@ -762,68 +714,9 @@ function displayContentList(contentList) {
 }
 
 // 显示媒体文件
-function showMediaFiles(contentId) {
-    const content = window.currentContentList?.find(item => item.id === contentId);
-    if (!content || !content.mediaFiles) {
-        showNotification('未找到媒体文件', 'warning');
-        return;
-    }
-    
-    const modal = document.getElementById('mediaModal');
-    const modalBody = document.getElementById('mediaModalBody');
-    
-    let mediaHtml = '<h3>📷 图片文件</h3><div class="media-grid">';
-    
-    content.mediaFiles.images.forEach(image => {
-        mediaHtml += `
-            <div class="media-item">
-                <img src="${image.url}" alt="图片" style="max-width: 100%; height: 150px; object-fit: cover;">
-                <p style="margin: 5px 0; font-size: 12px;">${image.size}</p>
-                <div id="img_result_${image.id}" style="font-size: 11px; color: #666;"></div>
-            </div>
-        `;
-    });
-    
-    mediaHtml += '</div><h3>🎥 视频文件</h3><div class="media-grid">';
-    
-    content.mediaFiles.videos.forEach(video => {
-        mediaHtml += `
-            <div class="media-item">
-                <div style="width: 100%; height: 150px; background: #f0f0f0; display: flex; align-items: center; justify-content: center; border-radius: 5px;">
-                    <span style="font-size: 24px;">🎥</span>
-                </div>
-                <p style="margin: 5px 0; font-size: 12px;">${video.duration} | ${video.size}</p>
-                <div id="vid_result_${video.id}" style="font-size: 11px; color: #666;"></div>
-            </div>
-        `;
-    });
-    
-    mediaHtml += '</div>';
-    modalBody.innerHTML = mediaHtml;
-    modal.style.display = 'block';
-    
-    // 自动审核媒体文件
-    moderateMediaFiles(content.mediaFiles).then(results => {
-        results.images.forEach(image => {
-            const resultDiv = document.getElementById(`img_result_${image.id}`);
-            if (resultDiv) {
-                resultDiv.innerHTML = getDetailedResultHtml(image.moderation_result);
-            }
-        });
-        
-        results.videos.forEach(video => {
-            const resultDiv = document.getElementById(`vid_result_${video.id}`);
-            if (resultDiv) {
-                resultDiv.innerHTML = getDetailedResultHtml(video.moderation_result);
-            }
-        });
-    });
-}
 
-// 关闭媒体模态框
-function closeMediaModal() {
-    document.getElementById('mediaModal').style.display = 'none';
-}
+
+
 
 // 获取详细结果HTML
 function getDetailedResultHtml(result) {
@@ -1829,12 +1722,7 @@ function downloadCSV(csvData, filename) {
 }
 
 // 点击模态框外部关闭
-window.onclick = function(event) {
-    const modal = document.getElementById('mediaModal');
-    if (event.target === modal) {
-        closeMediaModal();
-    }
-}
+
 
 // ========== 通用工具函数 ==========
 
@@ -1845,9 +1733,6 @@ function generateMediaInfoHtml(item) {
             📷 图片: ${item.images?.length || 0} 个 | 
             📢 音频: ${item.audios?.length || 0} 个 | 
             🎥 视频: ${item.videos?.length || 0} 个
-            ${(item.mediaFiles?.images?.length > 0 || item.mediaFiles?.videos?.length > 0) ? 
-                `<button onclick="showMediaFiles('${item.id}')" style="margin-left: 10px; padding: 2px 8px; background: #007bff; color: white; border: none; border-radius: 3px; font-size: 11px; cursor: pointer;">查看媒体</button>` : 
-                ''}
         </div>
     `;
 }
