@@ -112,11 +112,7 @@ const handlePageChange = (page: number) => {
   }
 }
 
-const batchAudit = async (action: 'approve' | 'reject') => {
-  // 批量审核功能
-  const actionText = action === 'approve' ? '通过' : '拒绝'
-  window.showNotification(`批量${actionText}功能开发中...`, 'info')
-}
+
 </script>
 
 <template>
@@ -143,23 +139,7 @@ const batchAudit = async (action: 'approve' | 'reject') => {
     
     <!-- 审核内容容器 -->
     <div v-if="showContentContainer" class="audit-content-container">
-      <div class="audit-header">
-        <h3>📋 内容列表</h3>
-        <div class="batch-audit-buttons">
-          <button 
-            class="btn btn-success btn-sm"
-            @click="batchAudit('approve')"
-          >
-            ✅ 批量通过
-          </button>
-          <button 
-            class="btn btn-danger btn-sm"
-            @click="batchAudit('reject')"
-          >
-            ❌ 批量拒绝
-          </button>
-        </div>
-      </div>
+
       
       <ContentList 
         :content-list="contentList"
@@ -202,22 +182,9 @@ const batchAudit = async (action: 'approve' | 'reject') => {
   margin-top: 30px;
 }
 
-.audit-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: 20px;
-}
 
-.audit-header h3 {
-  margin: 0;
-  color: #333;
-}
 
-.batch-audit-buttons {
-  display: flex;
-  gap: 10px;
-}
+
 
 .btn {
   padding: 12px 25px;

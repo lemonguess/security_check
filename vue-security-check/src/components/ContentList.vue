@@ -295,10 +295,7 @@ const auditAllContent = async () => {
   }
 }
 
-const exportResults = () => {
-  // 导出功能实现
-  window.showNotification('导出功能开发中...', 'info')
-}
+
 
 const getStatusClass = (status: string) => {
   switch (status) {
@@ -330,6 +327,51 @@ const getAuditButtonText = (status: string) => {
     case 'rejected': return '重新审核'
     case 'failed': return '重新审核'
     default: return '审核'
+  }
+}
+
+// 重新审核功能
+const reAuditItem = async (item: ContentItem) => {
+  try {
+    // 直接进入审核中状态
+    item.audit_status = 'reviewing'
+    
+    const API_BASE = `${window.location.protocol}//${window.location.hostname}:6188`
+    const response = await fetch(`${API_BASE}/api/v1/moderation/single`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        content: item.title,
+        content_id: String(item.id),
+        content_type: "text",
+        priority: 0,
+        timeout: 30.0,
+        regenerate_report: true  // 标记为重新生成报告
+      })
+    })
+    
+    if (!response.ok) {
+      throw new Error(`HTTP ${response.status}: ${response.statusText}`)
+    }
+    
+    const result = await response.json()
+    console.log('重新审核任务提交成功:', result)
+    
+    // 显示提交成功通知
+    window.showNotification('重新审核任务已提交，正在处理中...', 'info')
+    
+    // 开始轮询任务状态
+    if (result.task_id) {
+      pollTaskStatus(result.task_id, item)
+    }
+  } catch (error) {
+    console.error('重新审核失败:', error)
+    // 恢复原状态
+    item.audit_status = 'approved'
+    const errorMessage = error instanceof Error ? error.message : '未知错误'
+    window.showNotification(`重新审核失败: ${errorMessage}`, 'error')
   }
 }
 
@@ -439,7 +481,7 @@ const closeReportModal = () => {
       <span>已选择: {{ selectedCount }} 项</span>
       <button class="btn btn-primary" @click="auditAllContent">审核全部</button>
       <button class="btn btn-warning" @click="auditSelectedItems">审核选中</button>
-      <button class="btn btn-success" @click="exportResults">导出结果</button>
+
     </div>
     
     <!-- 进度条 -->
@@ -509,10 +551,15 @@ const closeReportModal = () => {
         <div class="content-actions">
           <button 
             class="btn btn-primary btn-sm"
-            :disabled="item.audit_status === 'reviewing' || item.audit_status === 'approved'"
-            @click="auditSingleItem(item.id)"
+            :class="{ 
+              'approved-btn': item.audit_status === 'approved'
+            }"
+            :disabled="item.audit_status === 'reviewing'"
+            @click="item.audit_status === 'approved' ? reAuditItem(item) : auditSingleItem(item.id)"
           >
-            {{ getAuditButtonText(item.audit_status || item.status) }}
+            <span class="btn-text" v-if="item.audit_status === 'approved'">已通过</span>
+            <span v-else>{{ getAuditButtonText(item.audit_status || item.status) }}</span>
+            <span class="btn-hover-text" v-if="item.audit_status === 'approved'">重新审核</span>
           </button>
           <button 
             v-if="item.audit_status === 'approved' || item.audit_status === 'rejected'"
@@ -613,6 +660,7 @@ const closeReportModal = () => {
 }
 
 .batch-operations {
+  color: #333;
   display: flex;
   align-items: center;
   gap: 15px;
@@ -810,8 +858,50 @@ const closeReportModal = () => {
 }
 
 .btn-primary:hover:not(:disabled) {
-  background: #8b1538;
+  background: linear-gradient(135deg, #a91b2e 0%, #7a1230 100%);
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(201, 30, 58, 0.3);
 }
+
+/* 已通过按钮的特殊样式 */
+.approved-btn {
+  position: relative;
+  overflow: hidden;
+  transition: width 0.3s ease;
+}
+
+.approved-btn .btn-text {
+  transition: opacity 0.3s ease;
+  white-space: nowrap;
+}
+
+.approved-btn .btn-hover-text {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  opacity: 0;
+  transition: opacity 0.3s ease;
+  pointer-events: none;
+  white-space: nowrap;
+}
+
+.approved-btn:hover {
+  width: auto;
+  min-width: 80px;
+  transform: translateY(-1px);
+  box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+}
+
+.approved-btn:hover .btn-text {
+  opacity: 0;
+}
+
+.approved-btn:hover .btn-hover-text {
+  opacity: 1;
+}
+
+
 
 .btn-warning {
   background: #ffc107;
