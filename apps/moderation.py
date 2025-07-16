@@ -144,6 +144,12 @@ class IDListModerationRequestAPI(BaseModel):
     id_list: List[int] = Field(..., description="内容ID列表", min_length=1, max_length=100)
 
 
+class TextModerationRequestAPI(BaseModel):
+    """文字审核请求模型"""
+    content: str = Field(..., description="待审核的文本内容", min_length=1, max_length=10000)
+    timeout: Optional[float] = Field(30.0, description="超时时间（秒）")
+
+
 def moderate_content_by_type(content_type: str, content_data: Any) -> Dict[str, Any]:
     """根据内容类型进行审核，等待审核结果完成后返回"""
     import time
@@ -973,3 +979,68 @@ async def get_audit_stats():
     finally:
         if not db.is_closed():
             db.close()
+
+
+@router.post("/text", summary="文字审核")
+async def moderate_text(request: Request, text_request: TextModerationRequestAPI):
+    """直接文字审核接口 - 同步返回审核结果"""
+    import time
+    
+    try:
+        service = request.app.state.service
+        logger = request.app.state.logger
+        
+        start_time = time.time()
+        logger.info(f"收到文字审核请求，内容长度: {len(text_request.content)}")
+        
+        # 创建审核请求对象
+        moderation_request = ModerationRequest(
+            content=text_request.content,
+            content_id=None,
+            content_type="text",
+            priority=0,
+            timeout=text_request.timeout
+        )
+        
+        # 直接调用审核服务进行文字审核
+        result = await service.moderate_text_direct(moderation_request)
+        
+        processing_time = time.time() - start_time
+        
+        # 更新统计数据
+        update_audit_stats(success=True, processing_time=processing_time)
+        
+        logger.info(f"文字审核完成，处理时间: {processing_time:.2f}s")
+        
+        return {
+            "success": True,
+            "data": {
+                "original_content": result.original_content,
+                "final_decision": result.final_decision,
+                "final_score": result.final_score,
+                "risk_reasons": result.fusion_result.risk_reasons if result.fusion_result else [],
+                "violated_categories": result.categories_detected,
+                "processing_time": result.processing_time,
+                "engines_used": [engine.value if hasattr(engine, 'value') else str(engine) for engine in result.engines_used],
+                "ai_result": {
+                    "risk_level": result.ai_result.risk_level.value if result.ai_result else "UNKNOWN",
+                    "risk_score": result.ai_result.risk_score if result.ai_result else 0.0,
+                    "risk_reasons": result.ai_result.risk_reasons if result.ai_result else [],
+                    "confidence_score": result.ai_result.confidence_score if result.ai_result else 0.0
+                } if result.ai_result else None,
+                "rule_result": {
+                    "risk_level": result.rule_result.risk_level.value if result.rule_result else "UNKNOWN",
+                    "risk_score": result.rule_result.risk_score if result.rule_result else 0.0,
+                    "sensitive_matches": len(result.rule_result.sensitive_matches) if result.rule_result else 0,
+                    "violated_categories": result.rule_result.violated_categories if result.rule_result else []
+                } if result.rule_result else None
+            },
+            "message": "文字审核完成"
+        }
+        
+    except Exception as e:
+        processing_time = time.time() - start_time if 'start_time' in locals() else 0.0
+        update_audit_stats(success=False, processing_time=processing_time)
+        
+        service_logger.error(f"文字审核失败: {e}")
+        raise HTTPException(status_code=500, detail=f"文字审核失败: {str(e)}")

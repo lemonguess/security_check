@@ -12,6 +12,7 @@ from apps.checks import check_router
 from apps.moderation import router as moderation_router
 from apps.scraper import router as scraper_router
 from apps.content import router as content_router
+from apps.vocabulary import router as vocabulary_router
 from task import start_task_loop
 import threading
 
@@ -80,6 +81,7 @@ app.include_router(scraper_router, prefix="/api/v1/scrape")
 app.include_router(check_router, prefix="/api/v1/check")
 app.include_router(moderation_router, prefix="/api/v1/moderation")
 app.include_router(content_router, prefix="/api/v1/content")
+app.include_router(vocabulary_router, prefix="/api/v1/vocabulary")
 
 
 @app.get("/", response_class=HTMLResponse)
@@ -147,7 +149,7 @@ if __name__ == '__main__':
         "main:app",
         host="0.0.0.0",
         port=6188,
-        reload=True,
+        # reload=True,
         workers=4,
         log_level="info"
     )

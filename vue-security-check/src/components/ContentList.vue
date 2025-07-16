@@ -660,7 +660,7 @@ const closeReportModal = () => {
 }
 
 .batch-operations {
-  color: #333;
+  color: #000000;
   display: flex;
   align-items: center;
   gap: 15px;

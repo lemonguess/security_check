@@ -22,7 +22,7 @@ from models.models import (
 )
 from models.enums import RiskLevel, EngineType, ProcessingStatus
 from utils.exceptions import ModerationError, TimeoutError as ModerationTimeoutError
-from services.agents import create_moderation_agent
+from services.text_moderation_service import TextModerationService
 from engines import RuleEngine, FusionEngine
 from utils.metrics import get_metrics_collector
 from utils.logger import get_logger
@@ -54,21 +54,9 @@ class ModerationService:
             engines_config = self.config.get("engines", {})
             enabled_engines = engines_config.get("enabled", [])
             
-            # 初始化AI代理
-            if "ai" in enabled_engines:
-                self.ai_agent = create_moderation_agent(self.config)
-                self.logger.info("AI代理初始化成功")
-            else:
-                self.ai_agent = None
-                self.logger.info("AI代理未启用")
-            
-            # 初始化规则引擎
-            if "rule" in enabled_engines:
-                self.rule_engine = RuleEngine()
-                self.logger.info("规则引擎初始化成功")
-            else:
-                self.rule_engine = None
-                self.logger.info("规则引擎未启用")
+            # 初始化文字审核服务
+            self.text_moderation_service = TextModerationService(self.config)
+            self.logger.info("文字审核服务初始化成功")
             
             # 初始化融合引擎
             fusion_config = engines_config.get("fusion", {})
@@ -211,49 +199,23 @@ class ModerationService:
         }
 
     async def _run_detection_engines(self, content: str) -> tuple[AIResult, RuleResult]:
-        """并行运行检测引擎"""
-        tasks = []
-        
-        # AI检测任务
-        if self.ai_agent:
-            ai_task = asyncio.create_task(self._run_ai_detection(content))
-            tasks.append(("ai", ai_task))
-        
-        # 规则检测任务
-        if self.rule_engine:
-            rule_task = asyncio.create_task(self.rule_engine.analyze(content))
-            tasks.append(("rule", rule_task))
-        
-        # 等待所有任务完成
-        results = {}
-        for engine_type, task in tasks:
-            try:
-                results[engine_type] = await task
-            except Exception as e:
-                self.logger.error(f"{engine_type}引擎检测失败: {e}")
-                results[engine_type] = self._get_default_result(engine_type, str(e))
-        
-        # 获取结果
-        ai_result = results.get("ai", self._get_default_result("ai", "AI引擎未启用"))
-        rule_result = results.get("rule", self._get_default_result("rule", "规则引擎未启用"))
-        
-        return ai_result, rule_result
-    
-    async def _run_ai_detection(self, content: str) -> AIResult:
-        """运行AI检测"""
+        """运行文字检测引擎"""
         try:
-            # AI代理的process方法可能是同步的，需要在线程池中运行
-            if self.ai_agent:
-                loop = asyncio.get_event_loop()
-                return await loop.run_in_executor(
-                    self.executor, 
-                    self.ai_agent.process, 
-                    content
-                )
-            raise ModerationError("AI agent is not enabled")
+            # 使用新的文字审核服务
+            loop = asyncio.get_event_loop()
+            ai_result, rule_result = await loop.run_in_executor(
+                self.executor,
+                self.text_moderation_service.moderate_text,
+                content
+            )
+            return ai_result, rule_result
         except Exception as e:
-            self.logger.error(f"AI检测失败: {e}")
-            raise
+            self.logger.error(f"文字检测引擎失败: {e}")
+            ai_result = self._get_default_result("ai", str(e))
+            rule_result = self._get_default_result("rule", str(e))
+            return ai_result, rule_result
+    
+
     
     def _get_default_result(self, engine_type: str, error_msg: str) -> Union[AIResult, RuleResult]:
         """获取默认的错误结果"""
@@ -315,7 +277,7 @@ class ModerationService:
             ai_result=ai_result,
             rule_result=rule_result,
             fusion_result=fusion_result,
-            final_decision=fusion_result.risk_level,
+            final_decision=fusion_result.risk_level.value,
             final_score=fusion_result.risk_score,
             processing_time=processing_time,
             engines_used=engines_used,
@@ -347,7 +309,7 @@ class ModerationService:
                 risk_reasons=["Error"], 
                 confidence_score=0.0
             ),
-            final_decision=RiskLevel.RISKY,  # 出错时采用保守策略
+            final_decision=RiskLevel.RISKY.value,  # 出错时采用保守策略
             final_score=0.7,
             processing_time=processing_time,
             engines_used=[],
@@ -448,22 +410,15 @@ class ModerationService:
             "statistics": self.get_statistics()
         }
         
-        # 检查各个引擎
-        if self.ai_agent:
-            try:
-                ai_health = self.ai_agent.health_check()
-                health_status["engines"]["ai"] = ai_health
-            except Exception as e:
-                health_status["engines"]["ai"] = {"status": "unhealthy", "error": str(e)}
+        # 检查文字审核服务
+        try:
+            text_health = self.text_moderation_service.health_check()
+            health_status["engines"]["text_moderation"] = text_health
+            if text_health["status"] != "healthy":
                 health_status["status"] = "degraded"
-        
-        if self.rule_engine:
-            try:
-                rule_health = await self.rule_engine.health_check()
-                health_status["engines"]["rule"] = rule_health
-            except Exception as e:
-                health_status["engines"]["rule"] = {"status": "unhealthy", "error": str(e)}
-                health_status["status"] = "degraded"
+        except Exception as e:
+            health_status["engines"]["text_moderation"] = {"status": "unhealthy", "error": str(e)}
+            health_status["status"] = "degraded"
         
         return health_status
     
@@ -478,17 +433,16 @@ class ModerationService:
             "failed_requests": self.failed_requests,
             "success_rate": success_rate,
             "engines_available": {
-                "ai": self.ai_agent is not None,
-                "rule": self.rule_engine is not None,
+                "text_moderation": self.text_moderation_service is not None,
                 "fusion": True
             }
         }
     
     def reload_rules(self):
         """重新加载规则配置"""
-        if self.rule_engine:
-            self.rule_engine.reload_rules()
-            self.logger.info("规则配置已重新加载")
+        if self.text_moderation_service:
+            self.text_moderation_service.refresh_violation_words_cache()
+            self.logger.info("违规词库缓存已重新加载")
     
     def update_fusion_weights(self, ai_weight: float, rule_weight: float):
         """更新融合引擎权重"""
@@ -503,3 +457,49 @@ class ModerationService:
     async def __aexit__(self, exc_type, exc_val, exc_tb):
         """异步上下文管理器出口"""
         self.executor.shutdown(wait=True)
+    
+    async def moderate_text_direct(self, request: ModerationRequest) -> ModerationResult:
+        """直接文字审核方法 - 不依赖数据库存储"""
+        start_time = time.time()
+        self.total_requests += 1
+        
+        try:
+            self.logger.info(f"开始直接文字审核，内容长度: {len(request.content)}")
+            
+            # 并行运行检测引擎
+            ai_result, rule_result = await self._run_detection_engines(request.content)
+            
+            # 融合结果
+            fusion_result = self.fusion_engine.process(
+                request.content, 
+                ai_result=ai_result, 
+                rule_result=rule_result
+            )
+            
+            processing_time = time.time() - start_time
+            
+            # 构建审核结果
+            result = self._build_moderation_result(
+                request, ai_result, rule_result, fusion_result, processing_time
+            )
+            
+            # 记录成功指标
+            self._record_success_metrics(result)
+            
+            self.logger.info(
+                f"直接文字审核完成: 风险等级={fusion_result.risk_level.value}, "
+                f"处理时间={processing_time:.2f}s"
+            )
+            
+            return result
+            
+        except Exception as e:
+            self.failed_requests += 1
+            processing_time = time.time() - start_time
+            
+            self.logger.error(f"直接文字审核失败: {e}")
+            
+            # 返回错误结果
+            return self._build_error_result(
+                request.content_id, request.content, str(e), processing_time
+            )

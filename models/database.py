@@ -94,17 +94,34 @@ class AuditStats(Model):
     class Meta:
         database = db
 
+# 违规词库表
+class ViolationWord(Model):
+    id = AutoField()
+    wrong_input = CharField(max_length=255, help_text="错误输入")
+    correct_input = CharField(max_length=255, help_text="正确输入")
+    violation_score = IntegerField(help_text="违规分数(1-100)")
+    is_active = BooleanField(default=True, help_text="是否启用")
+    created_at = CustomDateTimeField(default=datetime.now, help_text="创建时间")
+    updated_at = CustomDateTimeField(default=datetime.now, help_text="更新时间")
+    
+    class Meta:
+        database = db
+        indexes = (
+            (('wrong_input',), False),  # 为错误输入创建索引，提高查询效率
+        )
+
 # Audit表已删除，相关功能迁移到Contents表中
 
 # 创建表
 def create_tables():
     # 强制创建表，包含所有字段
     with db:
-        db.create_tables([Task, Contents, AuditStats], safe=True)
+        db.create_tables([Task, Contents, AuditStats, ViolationWord], safe=True)
     # print("数据库表创建成功！")
     # print("- Task 表")
     # print("- Contents 表 (包含 images, audios, videos 字段)")
     # print("- AuditStats 表 (审核统计表)")
+    # print("- ViolationWord 表 (违规词库表)")
 
 if __name__ == "__main__":
     create_tables()

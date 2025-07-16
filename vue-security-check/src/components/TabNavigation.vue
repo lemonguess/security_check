@@ -1,71 +1,64 @@
+<!-- TabNavigation.vue -->
 <script setup lang="ts">
-interface Props {
-  activeTab: string
+interface Tab {
+  id: string;
+  label: string;
 }
 
-interface Emits {
-  (e: 'switch-tab', tabName: string): void
+interface Props {
+  activeTab: string;
+  tabs: Tab[];
 }
 
 defineProps<Props>()
-const emit = defineEmits<Emits>()
 
-const handleTabClick = (tabName: string) => {
-  emit('switch-tab', tabName)
+const emit = defineEmits<{
+  (e: 'switch-tab', tab: string): void
+}>()
+
+const switchTab = (tab: string) => {
+  emit('switch-tab', tab)
 }
 </script>
 
 <template>
-  <div class="tabs">
-    <button 
-      class="tab" 
-      :class="{ active: activeTab === 'scraping' }"
-      @click="handleTabClick('scraping')"
+  <div class="sub-tab-navigation">
+    <div 
+      v-for="tab in tabs" 
+      :key="tab.id"
+      class="sub-tab-item"
+      :class="{ active: activeTab === tab.id }"
+      @click="switchTab(tab.id)"
     >
-      🔍 数据采集
-    </button>
-    <button 
-      class="tab" 
-      :class="{ active: activeTab === 'audit' }"
-      @click="handleTabClick('audit')"
-    >
-      📋 内容审核
-    </button>
+      {{ tab.label }}
+    </div>
   </div>
 </template>
 
 <style scoped>
-.tabs {
+.sub-tab-navigation {
   display: flex;
-  background: #f8f9fa;
-  border-bottom: 1px solid #e9ecef;
+  background: #f0f2f5;
+  border-bottom: 1px solid #e4e7ed;
+  padding: 0 20px;
 }
 
-.tab {
-  flex: 1;
+.sub-tab-item {
   padding: 15px 25px;
-  border: none;
-  background: transparent;
-  font-size: 16px;
-  font-weight: 600;
-  color: #6c757d;
   cursor: pointer;
-  transition: all 0.3s ease;
+  font-weight: 500;
+  color: #606266;
   border-bottom: 3px solid transparent;
+  transition: all 0.3s ease;
 }
 
-.tab:hover {
-  background: #e9ecef;
-  color: #495057;
+.sub-tab-item:hover {
+  color: #409eff;
 }
 
-.tab.active {
-  color: #c41e3a;
-  background: white;
-  border-bottom-color: #c41e3a;
-}
-
-.tab.active:hover {
-  background: white;
+.sub-tab-item.active {
+  color: #409eff;
+  border-bottom: 3px solid #409eff;
+  font-weight: 600;
 }
 </style>
