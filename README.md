@@ -116,11 +116,7 @@ security_check/
 
    ```bash
    # 推荐使用uv工具
-   pip install uv
-   uv pip install -r requirements.txt
-   
-   # 或使用pip
-   pip install -r requirements.txt
+   uv sync
    ```
 
 3. **配置环境**
@@ -319,8 +315,3 @@ MIT License
 3. 提交更改
 4. 推送到分支
 5. 创建 Pull Request
-
-## 联系方式
-
-- 项目维护者: [lixincheng]
-- 邮箱: [lemon_guess@163.com]
